@@ -1,0 +1,29 @@
+1.友元（Friend） 是 C++ 中的一种特殊机制，允许某个类或函数访问另一个类的私有（private）或保护（protected）成员
+C++ 支持三种友元:
+友元函数:普通函数或全局函数被声明为某个类的友元，可以访问该类的私有成员。
+友元类:整个类被声明为另一个类的友元，该类的所有成员函数都可以访问目标类的私有成员。
+友元成员函数:某个类的特定成员函数被声明为另一个类的友元，仅该函数能访问目标类的私有成员。
+
+需要外部函数访问私有数据（如运算符重载 operator<< 或 operator+）。
+两个类紧密耦合（如 User 和 UserManager，UserManager 需要直接操作 User 的私有数据）。
+提高性能（避免频繁调用 getter/setter）。
+
+
+// 声明友元类（UserManager 可以访问 User 的私有成员）
+class User{
+public:
+    friend class UserManager;
+    // 仅允许 Logger::logUserInfo 访问私有成员
+    friend void Logger::logUserInfo(const User& user);
+    // 声明友元函数（这个函数不是User的成员！）
+    friend void printUser(const User& user); 
+};
+
+class Logger {
+public:
+    void logUserInfo(const User& user);  // 声明但不定义
+};
+
+
+
+友元关系是单向的,友元不能继承
