@@ -11,8 +11,9 @@
 #include <algorithm>
 #include <iostream>
 #include <fstream>
+#include <memory>
 
-#include <openssl/sha.h>
+#include <openssl/evp.h>
 #include <sstream>
 #include <iomanip>
 // #define SHA256_DIGEST_LENGTH 256
