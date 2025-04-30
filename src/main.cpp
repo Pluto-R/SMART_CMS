@@ -4,7 +4,7 @@ using namespace std;
 int main()
 {
     //
-    UserManage manage("/home/jqz/Desktop/Smart_CMS/users.txt");
+    UserManage manage("/home/jqz/Desktop/Smart_CMS/users.txt","/home/jqz/Desktop/Smart_CMS/teacher_info.txt");
     while(1){
     cout << "choose function : [1] register  [2] login  [3]exit" << endl;
     int op;
@@ -21,6 +21,7 @@ int main()
         string name,passwd;
         cin >> name >> passwd;
         manage.Registered(type,name,passwd);
+
         break;
     }
     case 2:{

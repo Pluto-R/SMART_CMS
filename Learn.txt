@@ -238,3 +238,55 @@ emplace 试图构造一个 pair<const string, unique_ptr<User>>，但参数传�
 这会导致所有权转移问题
 
 std::move
+用于​​将对象标记为“可移动”（右值引用）​​，从而允许高效地转移资源（如动态内存、文件句柄等），而不是进行昂贵的深拷贝。
+​​不实际移动任何数据​​，仅仅是类型转换
+如果对象没有移动构造函数（例如基本类型 int、float），则会回退到拷贝。
+
+
+16.insert()、emplace()、emplace_back()各有什么区别？此外std::pair为什么需要std::make_pair来构造一个std::pair类型？
+(1)insert()
+用于在容器的指定位置插入元素（如 vector、list、map 等）
+​(2)​emplace()
+用于在容器的指定位置​​就地构造​​元素（避免拷贝或移动）。
+直接传递构造参数给元素的构造函数，直接在容器内存中构造对象。
+适用于复杂对象（如 std::pair、自定义类），避免临时对象的构造和拷贝。
+std::vector<std::pair<int, std::string>> v;
+v.emplace(v.begin(), 1, "one"); // 直接构造 pair(1, "one")
+(3)emplace_back()
+emplace() 的特化版本，专用于在容器末尾（如 vector、deque、list）就地构造元素。
+比 push_back() 更高效，因为 push_back() 需要先构造临时对象再移动或拷贝到容器。
+
+insert() 需要已构造的对象（可能涉及拷贝/移动）。
+emplace() 和 emplace_back() 直接通过参数构造对象，避免额外开销。
+
+​​std::make_pair 的作用​​：
+是一个模板函数，用于自动推导 std::pair 的模板参数类型。
+避免手动指定类型，简化代码。
+示例：
+auto p = std::make_pair(42, "hello"); // 自动推导为 std::pair<int, const char*>
+​​直接构造 std::pair 的问题​​：
+如果手动构造 std::pair，必须显式指定类型：
+std::pair<int, std::string> p(42, "hello"); // 需要明确类型
+
+
+17.如果是智能指针的内容，也是可以通过std::,move进行移动是吗？智能指针禁止拷贝构造是怎样的？
+std::unique_ptr禁止拷贝构造/赋值,允许移动构造/移动赋值​​（通过 std::move 转移所有权）。
+
+std::unique_ptr<int> p1 = std::make_unique<int>(42);
+// std::unique_ptr<int> p2 = p1; // 错误！禁止拷贝
+std::unique_ptr<int> p2 = std::move(p1); // 正确！移动构造    
+
+p1 被 std::move 后变为 nullptr​​，所有权完全转移给 p2。
+​​禁止拷贝​​，确保资源不会被多个 unique_ptr 管理。
+
+
+18.继承的派生类的指针能够指向基类吗？
+
+基类指针可以指向派生类
+派生类指针不能直接指向基类对象 
+
+比如teacher类是继承类user，tearcher类能够使用user类的成员变量吗?
+基类成员的访问权限​​
+​​public​​：派生类可以直接访问。
+​​protected​​：派生类可以直接访问，但外部代码不能。
+​​private​​：派生类​​不能直接访问​​（只能通过基类的 public/protected 方法间接访问）。

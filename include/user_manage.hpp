@@ -4,11 +4,12 @@
 #include "config.hpp"
 
 const std::string user_file = "/home/jqz/Desktop/Smart_CMS/users.txt";
+const std::string teacher_file = "/home/jqz/Desktop/Smart_CMS/teacher_info.txt";
 
 // SHA-256加密哈希算法
-inline std::string hashPasswd(const std::string& password, const std::string& salt);
+std::string hashPasswd(const std::string& password, const std::string& salt);
 // 生成随机盐值
-inline std::string generateSalt(size_t length = 16);
+std::string generateSalt(size_t length = 16);
 
 //
 std::string binaryToHex(const std::string& binary);
@@ -56,15 +57,40 @@ protected:
     std::string Tofilestring();
 };
 
+//后续考虑使用std::bitset来减小内存
+//李四|在职教师|数学,物理,化学,生物|400-700|渝中区,北碚区|Tue[12:00-14:00],Wed[14:00-17:00]
+class Teacher : public User{
+    public:
+        Teacher() : User("1","","") {}
+        Teacher(std::string education_,std::vector<std::string> subjects_,uint16_t price_min_,uint16_t price_high_,std::vector<std::string> allow_location_,std::vector<std::pair<std::string, std::pair<int, int>>> available_times_) :  
+        User("1", "", ""), education(education_),subjects(subjects_),price_min(price_min_),price_high(price_high_),allow_location(allow_location_),available_times(available_times_){};
+    
+        std::string education;
+        std::vector<std::string> subjects;
+        uint16_t price_min,price_high;
+        std::vector<std::string> allow_location;
+        
+        std::vector<std::pair<std::string, std::pair<int, int>>> available_times; 
+             
+        //add available_time
+        void add_avaliabe_time(const std::string& weekday, int time_begin, int time_end){
+        //    available_times.emplace(available_times.begin(),weekday,std::make_pair(time_begin,time_end));
+            available_times.emplace_back(weekday,std::make_pair(time_begin,time_end));
+        }
+    
+        std::string ToTeachfilestring();
+    };
 
 class UserManage{
 private:    
     //创造使用用户名作为键的哈希表,
     //std::unordered_map<std::string,User*> users;
     std::unordered_map<std::string,std::unique_ptr<User>> users;
+    std::unordered_map<std::string,std::unique_ptr<Teacher>> teachers;
 public:
-    UserManage(std::string user_file){
+    UserManage(std::string user_file, std::string teacher_file){
         LoadUsers(user_file);  
+        LoadTeachers(teacher_file);
     }
 
     bool Login(const std::string& type, const std::string& name, const std::string& passwd) const;
@@ -81,6 +107,12 @@ public:
     std::unique_ptr<User> fromFile(const std::string& data);
     void LoadUsers(std::string user_file);
     void SaveUsers();
+
+    std::unique_ptr<Teacher> fromTeachFile(const std::string& data);   
+     
+    void LoadTeachers(std::string teacher_file);
+    void SaveTeachers();
+
 };
 
 
