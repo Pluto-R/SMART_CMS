@@ -48,6 +48,7 @@ void UserManage::Registered(const std::string& type, const std::string& name, co
 
         if (type == "1") {
             std::string education;
+            std::string character;
             std::vector<std::string> subjects;
             uint16_t price_min, price_high;
             std::vector<std::string> locations;
@@ -57,6 +58,11 @@ void UserManage::Registered(const std::string& type, const std::string& name, co
             std::cin >> education;
             std::cin.ignore(); // Clear newline
 
+            std::cout << "请输入您期望的老师的性格： 0：亲和型    1： 权威型: ";
+            std::cin >> character;
+            //std::cin.ignore();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');  
+                
             std::cout << "输入您教学科目（以逗号分隔）：";
             std::string subjects_str;
             std::getline(std::cin, subjects_str);
@@ -108,7 +114,7 @@ void UserManage::Registered(const std::string& type, const std::string& name, co
             }
 
             auto teacher = std::make_unique<Teacher>(
-                education, subjects, price_min, price_high, locations, available_times);
+                education, character, subjects, price_min, price_high, locations, available_times);
             teacher->ChangeName(name);
             teachers.emplace(name, std::move(teacher));
             SaveTeachers();
@@ -227,7 +233,7 @@ std::string Teacher::ToTeachfilestring(){
     }
     std::string price_m = std::to_string(price_min);
     std::string price_h = std::to_string(price_high);
-    return user_name + '|' + education + '|' + course + '|' + price_m + '|' + price_h + '|' + locations + '|' + times;
+    return user_name + '|' + education + '|' + character + '|' + course + '|' + price_m + '|' + price_h + '|' + locations + '|' + times;
 }
 
 //一个从文件字符串反序列化创建User对象
@@ -241,7 +247,6 @@ std::unique_ptr<User> UserManage::fromFile(const std::string& data){
         std::unique_ptr<User> ptr = std::make_unique<User>(type,name,hash);
         ptr->ChangeName(name);
         ptr->ChangeType(type);
-        
         ptr->ChangeHash(hash);
         ptr->ChangeSalt(salt);
         std::cout << "name: " << ptr->GetName() << ' ' << "salt: " << ptr->Getsalt()  << ' ' << "type: "<< ptr->GetType() << std::endl;
@@ -252,11 +257,12 @@ std::unique_ptr<User> UserManage::fromFile(const std::string& data){
 
 std::unique_ptr<Teacher> UserManage::fromTeachFile(const std::string& data) {
     std::istringstream iss(data);
-    std::string name, education, course, price_min, price_high, locations, times;
+    std::string name, education, character, course, price_min, price_high, locations, times;
 
     auto teacher_info = std::make_unique<Teacher>();
     if (!std::getline(iss, name, '|') ||
         !std::getline(iss, education, '|') ||
+        !std::getline(iss, character,'|') ||
         !std::getline(iss, course, '|') ||
         !std::getline(iss, price_min, '|') ||
         !std::getline(iss, price_high, '|') ||
@@ -267,7 +273,7 @@ std::unique_ptr<Teacher> UserManage::fromTeachFile(const std::string& data) {
 
     teacher_info->ChangeName(name);
     teacher_info->education = education;
-
+    teacher_info->character = character;
     std::istringstream course_ss(course);
     std::string subject;
     while (std::getline(course_ss, subject, ',')) {

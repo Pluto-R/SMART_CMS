@@ -62,10 +62,11 @@ protected:
 class Teacher : public User{
     public:
         Teacher() : User("1","","") {}
-        Teacher(std::string education_,std::vector<std::string> subjects_,uint16_t price_min_,uint16_t price_high_,std::vector<std::string> allow_location_,std::vector<std::pair<std::string, std::pair<int, int>>> available_times_) :  
-        User("1", "", ""), education(education_),subjects(subjects_),price_min(price_min_),price_high(price_high_),allow_location(allow_location_),available_times(available_times_){};
-    
+        Teacher(std::string education_,std::string character_, std::vector<std::string> subjects_,uint16_t price_min_,uint16_t price_high_,std::vector<std::string> allow_location_,std::vector<std::pair<std::string, std::pair<int, int>>> available_times_) :  
+        User("1", "", ""), education(education_),character(character_),subjects(subjects_),price_min(price_min_),price_high(price_high_),allow_location(allow_location_),available_times(available_times_){};
+
         std::string education;
+        std::string character;
         std::vector<std::string> subjects;
         uint16_t price_min,price_high;
         std::vector<std::string> allow_location;
