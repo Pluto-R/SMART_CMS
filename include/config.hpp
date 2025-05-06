@@ -16,6 +16,7 @@
 #include <openssl/evp.h>
 #include <sstream>
 #include <iomanip>
+#include <algorithm>
 // #define SHA256_DIGEST_LENGTH 256
 // // 通用结构体（可根据需要扩展）
 // struct User {

@@ -78,8 +78,13 @@ class Teacher : public User{
         //    available_times.emplace(available_times.begin(),weekday,std::make_pair(time_begin,time_end));
             available_times.emplace_back(weekday,std::make_pair(time_begin,time_end));
         }
-    
+        
         std::string ToTeachfilestring();
+
+        std::unique_ptr<Teacher> clone() const {
+            return std::make_unique<Teacher>(education, character, subjects, price_min, price_high,
+                                            allow_location, available_times);
+        }
     };
 
 class UserManage{
@@ -114,6 +119,9 @@ public:
     void LoadTeachers(std::string teacher_file);
     void SaveTeachers();
 
+    const std::unordered_map<std::string, std::unique_ptr<Teacher>>& GetTeachers() const {
+        return teachers;
+    }
 };
 
 

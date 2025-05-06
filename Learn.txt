@@ -290,3 +290,5 @@ p1 被 std::move 后变为 nullptr​​，所有权完全转移给 p2。
 ​​public​​：派生类可以直接访问。
 ​​protected​​：派生类可以直接访问，但外部代码不能。
 ​​private​​：派生类​​不能直接访问​​（只能通过基类的 public/protected 方法间接访问）。
+
+19.
