@@ -119,7 +119,7 @@ public:
     void LoadTeachers(std::string teacher_file);
     void SaveTeachers();
 
-    const std::unordered_map<std::string, std::unique_ptr<Teacher>>& GetTeachers() const {
+    std::unordered_map<std::string, std::unique_ptr<Teacher>>& GetTeachers() {
         return teachers;
     }
 };
