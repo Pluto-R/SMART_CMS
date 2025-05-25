@@ -15,8 +15,9 @@ else()
     message(STATUS "Building in RELEASE mode")
 endif()
 
-# # 查找 SQLite3
+# 查找依赖库
 find_package(OpenSSL REQUIRED)
+find_package(SFML 2.5 COMPONENTS graphics window system REQUIRED)
 
 # 包含头文件目录
 include_directories(${CMAKE_SOURCE_DIR}/include)
@@ -33,11 +34,14 @@ set(SOURCES
 # 生成可执行文件
 add_executable(EduMatchSystem ${SOURCES})
 
-# # 链接 SQLite3 库
-# target_link_libraries(EduMatchSystem PRIVATE SQLite3::SQLite3)
-# 链接 OpenSSL 库
-target_link_libraries(EduMatchSystem PRIVATE OpenSSL::SSL OpenSSL::Crypto)
-
+# 链接库
+target_link_libraries(EduMatchSystem PRIVATE
+    OpenSSL::SSL
+    OpenSSL::Crypto
+    sfml-graphics
+    sfml-window
+    sfml-system
+)
 
 # 设置编译选项
 target_compile_options(EduMatchSystem PRIVATE -Wall -Wextra)

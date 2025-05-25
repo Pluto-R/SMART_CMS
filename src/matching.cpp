@@ -1,6 +1,7 @@
 #include "matching.hpp"
 #include <algorithm>
 #include <cmath>
+#include <set>
 
 MatchingManager::MatchingManager(UserManage& userManage) : userManage(userManage) {
     for (auto& pair : userManage.GetTeachers()) {
@@ -74,10 +75,13 @@ bool MatchingManager::priceOverlap(uint16_t teacher_min, uint16_t teacher_max,
 
 std::vector<MatchResult> MatchingManager::matchTeachers(const MatchingCriteria& criteria) {
     std::vector<MatchResult> results;
+    std::set<std::string> unique_teachers; // 跟踪唯一老师姓名
 
+    // Step 1: Filter by subject (老师学科包含学生学科)
     auto subject_it = subject_index.find(criteria.subject);
     std::vector<Teacher*> candidates = (subject_it != subject_index.end()) ? subject_it->second : std::vector<Teacher*>();
 
+    // Step 2: Intersect with location
     auto location_it = location_index.find(criteria.location);
     if (location_it != location_index.end()) {
         candidates = price_tree.intersect(candidates, location_it->second);
@@ -85,10 +89,13 @@ std::vector<MatchResult> MatchingManager::matchTeachers(const MatchingCriteria& 
         candidates.clear();
     }
 
+    // Step 3: Filter by price range using PriceRBTree
     candidates = price_tree.queryRange(criteria.price_min, criteria.price_high, candidates);
 
+    // Step 4: Filter by time overlap using TimeIntervalTree
     candidates = time_tree.queryOverlap(criteria.time_slot.second, candidates);
 
+    // Step 5: Apply additional filters and calculate scores
     for (Teacher* teacher_ptr : candidates) {
         if (teacher_ptr->education != criteria.education) continue;
         if (teacher_ptr->character != criteria.character) continue;
@@ -96,12 +103,17 @@ std::vector<MatchResult> MatchingManager::matchTeachers(const MatchingCriteria& 
         if (!priceOverlap(teacher_ptr->price_min, teacher_ptr->price_high, 
                           criteria.price_min, criteria.price_high)) continue;
 
-        double score = calculateScore(*teacher_ptr, criteria);
-        if (score > 0.0) {
-            results.push_back({std::make_unique<Teacher>(*teacher_ptr), score});
+        // 仅添加未重复的老师
+        if (unique_teachers.find(teacher_ptr->GetName()) == unique_teachers.end()) {
+            double score = calculateScore(*teacher_ptr, criteria);
+            if (score > 0.0) {
+                results.push_back({std::make_unique<Teacher>(*teacher_ptr), score});
+                unique_teachers.insert(teacher_ptr->GetName());
+            }
         }
     }
 
+    // Step 6: Sort by score and limit to top 5
     std::sort(results.begin(), results.end(), [](const auto& a, const auto& b) {
         return a.score > b.score;
     });
@@ -166,9 +178,11 @@ void PriceRBTree::queryRange(Node* h, uint16_t low, uint16_t high, std::vector<T
 
 std::vector<Teacher*> PriceRBTree::intersect(const std::vector<Teacher*>& a, const std::vector<Teacher*>& b) const {
     std::vector<Teacher*> result;
+    std::set<Teacher*> seen; // 去重
     for (Teacher* t : a) {
-        if (std::find(b.begin(), b.end(), t) != b.end()) {
+        if (std::find(b.begin(), b.end(), t) != b.end() && seen.find(t) == seen.end()) {
             result.push_back(t);
+            seen.insert(t);
         }
     }
     return result;
@@ -213,9 +227,11 @@ void TimeIntervalTree::queryOverlap(Node* h, int start, int end, std::vector<Tea
 
 std::vector<Teacher*> TimeIntervalTree::intersect(const std::vector<Teacher*>& a, const std::vector<Teacher*>& b) const {
     std::vector<Teacher*> result;
+    std::set<Teacher*> seen; // 去重
     for (Teacher* t : a) {
-        if (std::find(b.begin(), b.end(), t) != b.end()) {
+        if (std::find(b.begin(), b.end(), t) != b.end() && seen.find(t) == seen.end()) {
             result.push_back(t);
+            seen.insert(t);
         }
     }
     return result;

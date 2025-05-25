@@ -1,4 +1,8 @@
 #include "user_manage.hpp"
+#include <fstream>
+#include <sstream>
+#include <iostream>
+#include <limits>
 
 std::string hashPasswd(const std::string& password, const std::string& salt) {
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
@@ -36,15 +40,10 @@ std::string binaryToHex(const std::string& binary) {
 }
 
 void UserManage::Registered(const std::string& type, const std::string& name, const std::string& passwd) {
-    if(users.find(name) == users.end()) {
-        //users.insert({name,new User(type,name,passwd)});  //直接尝试插入 new User 的裸指针或初始化列表 {name, new User(...)}，这与 unique_ptr 的独占所有权语义冲突
-        //编译器无法找到合适的pair构造函数来插入元素。
+    if (users.find(name) == users.end()) {
         users.emplace(name, std::make_unique<User>(type, name, passwd));
         std::cout << "Success register!" << std::endl;
         SaveUsers();
-        // for(auto it = users.begin();it != users.end();it++){
-        //     std::cout << it->second->Gethash_passwd()<< std::endl;
-        // }
 
         if (type == "1") {
             std::string education;
@@ -54,15 +53,14 @@ void UserManage::Registered(const std::string& type, const std::string& name, co
             std::vector<std::string> locations;
             std::vector<std::pair<std::string, std::pair<int, int>>> available_times;
 
-            std::cout << "请输入老师的学历:  0:大学生家教  1:在职教师  2:特级教师: ";
+            std::cout << "请输入老师的学历: 0:大学生家教 1:在职教师 2:特级教师: ";
             std::cin >> education;
-            std::cin.ignore(); // Clear newline
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
-            std::cout << "请输入您期望的老师的性格： 0：亲和型    1： 权威型: ";
+            std::cout << "请输入您期望的老师的性格：0：亲和型 1：权威型: ";
             std::cin >> character;
-            //std::cin.ignore();
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');  
-                
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
             std::cout << "输入您教学科目（以逗号分隔）：";
             std::string subjects_str;
             std::getline(std::cin, subjects_str);
@@ -79,7 +77,7 @@ void UserManage::Registered(const std::string& type, const std::string& name, co
 
             std::cout << "输入最大价格: ";
             std::cin >> price_high;
-            std::cin.ignore(); // Clear newline
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
             std::cout << "输入可教学的地点（以逗号分隔）: ";
             std::string locations_str;
@@ -92,7 +90,7 @@ void UserManage::Registered(const std::string& type, const std::string& name, co
                 }
             }
 
-            std::cout << "输入可用时间（格式: Tue,12,14/Wed,14,17）：";
+            std::cout << "输入可用时间（格式: Tue,1200,1400/Wed,1400,1700）：";
             std::string times_str;
             std::getline(std::cin, times_str);
             std::istringstream times_ss(times_str);
@@ -126,130 +124,139 @@ void UserManage::Registered(const std::string& type, const std::string& name, co
 
 std::unique_ptr<User>& UserManage::FindUser(const std::string& name) {
     auto it = users.find(name);
-    if(it != users.end()){
-        return it -> second;
+    if (it != users.end()) {
+        return it->second;
     }
-    throw std::runtime_error("User not found: " + name); 
+    throw std::runtime_error("User not found: " + name);
 }
 
+std::unique_ptr<Teacher>& UserManage::FindTeacher(const std::string& name) {
+    auto it = teachers.find(name);
+    if (it != teachers.end()) {
+        return it->second;
+    }
+    throw std::runtime_error("Teacher not found: " + name);
+}
 
-//这样会导致内存泄露，直接使用已存储的用户对象进行验证
-//容器find(键)得到的是指向值的指针吗？此外像下面这种直接使用it不行吗？为什么还需要创建一个新的User指针？这样还没有删除不会导致内存泄露吗？it作为一个指针，还是作为一个迭代器？不会导致内存泄露吗？是不是只有new一个指针才需要考虑内存泄露的问题？
-bool UserManage::Login(const std::string& type, const std::string& name, const std::string& passwd) const{
+bool UserManage::Login(const std::string& type, const std::string& name, const std::string& passwd) const {
     auto it = users.find(name);
-    //std::string name2 = it->second->GetName();
-    //std::cout << "This is a test about " << name2 << std::endl; 
-    if(it != users.end()){
-        
-        std::cout << it->second->Gethash_passwd() << " " << hashPasswd(passwd,it->second->Getsalt()) << " " << passwd << std::endl;
-        bool success_passwd = (it->second->Gethash_passwd() == binaryToHex(hashPasswd(passwd,it->second->Getsalt())));
-        bool success_type = (it->second->GetType() == type); 
-        if(success_passwd && success_type){
+    if (it != users.end()) {
+        bool success_passwd = (it->second->Gethash_passwd() == binaryToHex(hashPasswd(passwd, it->second->Getsalt())));
+        bool success_type = (it->second->GetType() == type);
+        if (success_passwd && success_type) {
             std::cout << "Success to login!" << std::endl;
-            return true;}
-        else{
-            if(!success_type) std::cout << "The type is error!" << std::endl;
-            if(!success_passwd) std::cout << "The passwd is error!" << std::endl;
+            return true;
+        } else {
+            if (!success_type) std::cout << "The type is error!" << std::endl;
+            if (!success_passwd) std::cout << "The passwd is error!" << std::endl;
             return false;
         }
     }
-    std::cout << "Faile to login!Not exist user!" << std::endl;
+    std::cout << "Failed to login! Not exist user!" << std::endl;
     return false;
 }
 
-//在UserManage对象构造函数时就将数据加载到哈希表
-void UserManage::LoadUsers(std::string user_file){
+void UserManage::LoadUsers(std::string user_file) {
     std::ifstream file(user_file);
-    if(!file) return;
+    if (!file) {
+        std::cerr << "Failed to open users file: " << user_file << ", creating empty file." << std::endl;
+        std::ofstream create_file(user_file);
+        create_file.close();
+        return;
+    }
     std::string line;
-    while(std::getline(file,line)){
-        //!!!unique_ptr 是不可复制的，只能移动  直接获取 unique_ptr
-        //if(std::unique_ptr<User> user = fromFile(line)){
-        if(auto user = fromFile(line)){
-            //string std::unique_ptr<User>
-            
-            //使用 try_emplace 或 insert 替代 emplace,std::move???
-            //users.emplace(user->GetName(),user); 
-            users.insert({user->GetName(),std::move(user)});
+    while (std::getline(file, line)) {
+        if (auto user = fromFile(line)) {
+            users.insert({user->GetName(), std::move(user)});
         }
     }
+    //std::cout << "Loaded " << users.size() << " users from " << user_file << std::endl;
 }
 
-void UserManage::LoadTeachers(std::string teacher_file){
+void UserManage::LoadTeachers(std::string teacher_file) {
     std::ifstream file(teacher_file);
-    if(!file) return;
+    if (!file) {
+        std::cerr << "Failed to open teachers file: " << teacher_file << ", creating empty file." << std::endl;
+        std::ofstream create_file(teacher_file);
+        create_file.close();
+        return;
+    }
     std::string line;
-    while(std::getline(file,line)){
-        if(auto teacher = fromTeachFile(line)){
-            teachers.insert({teacher->GetName(),std::move(teacher)});
+    while (std::getline(file, line)) {
+        if (auto teacher = fromTeachFile(line)) {
+            if (teachers.find(teacher->GetName()) == teachers.end()) {
+                teachers.insert({teacher->GetName(), std::move(teacher)});
+            }
         }
     }
+    //std::cout << "Loaded " << teachers.size() << " teachers from " << teacher_file << std::endl;
 }
 
-//在UserManage对象登记用户后把数据信息存入txt文件
-void UserManage::SaveUsers(){
+void UserManage::SaveUsers() {
     std::ofstream file(user_file);
+    if (!file) {
+        std::cerr << "Failed to open users file for writing: " << user_file << std::endl;
+        return;
+    }
     for (const auto& pair : users) {
-        file << pair.second->Tofilestring() << "\n"; 
+        file << pair.second->Tofilestring() << "\n";
     }
+    std::cout << "Saved " << users.size() << " users to " << user_file << std::endl;
 }
 
-void UserManage::SaveTeachers(){
+void UserManage::SaveTeachers() {
     std::ofstream file(teacher_file);
-    for (const auto& pair : teachers){
-        file << pair.second->ToTeachfilestring() << "\n";
+    if (!file) {
+        std::cerr << "Failed to open teachers file for writing: " << teacher_file << std::endl;
+        return;
     }
+    for (const auto& pair : teachers) {
+        file << pair.second->ToTeachfilestring() << "\n";
+        //std::cout << "[UserManage] Saved teacher: " << pair.first
+                  //<< ", available_times=" << pair.second->ToTeachfilestring() << std::endl;
+    }
+    std::cout << "Saved " << teachers.size() << " teachers to " << teacher_file << std::endl;
 }
 
-//User类的函数，主要想把当前user的成员转换成想要传入txt文件中的格式
 std::string User::Tofilestring() {
-    return user_name + ',' + user_type + ',' + hash_passwd + ',' + salt; 
+    return user_name + ',' + user_type + ',' + hash_passwd + ',' + salt;
 }
 
-std::string Teacher::ToTeachfilestring(){
+std::string Teacher::ToTeachfilestring() {
     std::string course;
-    for(auto it = subjects.begin();it != subjects.end();it++){
-        if(it != subjects.end()-1)
-            course += *it + ','; 
-        else
-            course += *it; 
-        
+    for (auto it = subjects.begin(); it != subjects.end(); ++it) {
+        course += *it;
+        if (it != subjects.end() - 1) course += ",";
     }
     std::string locations;
-    for(auto it = allow_location.begin();it != allow_location.end();it++){
-        if(it != allow_location.end()-1)
-            locations += *it + ','; 
-        else
-            locations += *it; 
-        
+    for (auto it = allow_location.begin(); it != allow_location.end(); ++it) {
+        locations += *it;
+        if (it != allow_location.end() - 1) locations += ",";
     }
     std::string times;
-    for(auto it = available_times.begin();it != available_times.end();it++){
+    for (auto it = available_times.begin(); it != available_times.end(); ++it) {
         auto ti = it->second;
-        if(it != available_times.end()-1)
-            times += it->first + ',' + std::to_string(ti.first) + ',' + std::to_string(ti.second) + '/';
-        else
-            times += it->first + ',' + std::to_string(ti.first) + ',' + std::to_string(ti.second);
+        times += it->first + "," + std::to_string(ti.first) + "," + std::to_string(ti.second);
+        if (it != available_times.end() - 1) times += "/";
     }
     std::string price_m = std::to_string(price_min);
     std::string price_h = std::to_string(price_high);
-    return user_name + '|' + education + '|' + character + '|' + course + '|' + price_m + '|' + price_h + '|' + locations + '|' + times;
+    return user_name + "|" + education + "|" + character + "|" + course + "|" + price_m + "|" + price_h + "|" + locations + "|" + times;
 }
 
-//一个从文件字符串反序列化创建User对象
-std::unique_ptr<User> UserManage::fromFile(const std::string& data){
+std::unique_ptr<User> UserManage::fromFile(const std::string& data) {
     std::istringstream iss(data);
     std::string name, type, hash, salt;
-    if(std::getline(iss, name, ',') &&
-    std::getline(iss, type, ',') &&
-    std::getline(iss, hash, ',') &&
-    std::getline(iss, salt)){
-        std::unique_ptr<User> ptr = std::make_unique<User>(type,name,hash);
+    if (std::getline(iss, name, ',') &&
+        std::getline(iss, type, ',') &&
+        std::getline(iss, hash, ',') &&
+        std::getline(iss, salt)) {
+        std::unique_ptr<User> ptr = std::make_unique<User>(type, name, hash);
         ptr->ChangeName(name);
         ptr->ChangeType(type);
         ptr->ChangeHash(hash);
         ptr->ChangeSalt(salt);
-        std::cout << "name: " << ptr->GetName() << ' ' << "salt: " << ptr->Getsalt()  << ' ' << "type: "<< ptr->GetType() << std::endl;
+        //std::cout << "Loaded user: name=" << ptr->GetName() << ", type=" << ptr->GetType() << std::endl;
         return ptr;
     }
     return nullptr;
@@ -262,13 +269,13 @@ std::unique_ptr<Teacher> UserManage::fromTeachFile(const std::string& data) {
     auto teacher_info = std::make_unique<Teacher>();
     if (!std::getline(iss, name, '|') ||
         !std::getline(iss, education, '|') ||
-        !std::getline(iss, character,'|') ||
+        !std::getline(iss, character, '|') ||
         !std::getline(iss, course, '|') ||
         !std::getline(iss, price_min, '|') ||
         !std::getline(iss, price_high, '|') ||
         !std::getline(iss, locations, '|') ||
         !std::getline(iss, times)) {
-        return nullptr; 
+        return nullptr;
     }
 
     teacher_info->ChangeName(name);
@@ -286,7 +293,7 @@ std::unique_ptr<Teacher> UserManage::fromTeachFile(const std::string& data) {
         teacher_info->price_min = std::stoi(price_min);
         teacher_info->price_high = std::stoi(price_high);
     } catch (const std::exception& e) {
-        return nullptr; 
+        return nullptr;
     }
 
     std::istringstream locations_ss(locations);
@@ -310,11 +317,149 @@ std::unique_ptr<Teacher> UserManage::fromTeachFile(const std::string& data) {
                 int end = std::stoi(end_str);
                 teacher_info->available_times.emplace_back(day, std::make_pair(start, end));
             } catch (const std::exception& e) {
-                continue; 
+                continue;
             }
         }
     }
-    std::cout << "name: " << teacher_info->GetName() << ' ' << "education: " << teacher_info->education  << ' ' << "subjects: "<< course << ' ' << times << std::endl;
+    // std::cout << "Loaded teacher: name=" << teacher_info->GetName() << ", education=" << teacher_info->education
+    //           << ", subjects=" << course << ", times=" << times << std::endl;
 
     return teacher_info;
+}
+
+void UserManage::AddRelationship(const std::string& student_name, const std::string& teacher_name,
+                                const std::string& subject, const std::string& time_slot) {
+    std::stringstream ss(time_slot);
+    std::string day, start_str, end_str;
+    if (!std::getline(ss, day, ',') || !std::getline(ss, start_str, ',') || !std::getline(ss, end_str)) {
+        std::cerr << "[UserManage] Invalid time slot format: " << time_slot << std::endl;
+        return;
+    }
+    int start, end;
+    try {
+        start = std::stoi(start_str);
+        end = std::stoi(end_str);
+    } catch (const std::exception& e) {
+        std::cerr << "[UserManage] Invalid time values: " << time_slot << std::endl;
+        return;
+    }
+
+    auto& teacher = FindTeacher(teacher_name);
+    if (!teacher->has_time_conflict(day, start, end)) {
+        std::cerr << "[UserManage] Teacher " << teacher_name << " is not available for time slot: " << time_slot << std::endl;
+        return;
+    }
+
+    for (const auto& rel : relationships) {
+        if (std::get<1>(rel) == teacher_name) {
+            std::stringstream rel_ss(std::get<3>(rel));
+            std::string rel_day, rel_start_str, rel_end_str;
+            if (std::getline(rel_ss, rel_day, ',') && std::getline(rel_ss, rel_start_str, ',') && std::getline(rel_ss, rel_end_str)) {
+                try {
+                    int rel_start = std::stoi(rel_start_str);
+                    int rel_end = std::stoi(rel_end_str);
+                    if (rel_day == day && start < rel_end && end > rel_start) {
+                        std::cerr << "[UserManage] Time slot " << time_slot << " conflicts with existing booking for teacher "
+                                  << teacher_name << ": " << std::get<3>(rel) << std::endl;
+                        return;
+                    }
+                } catch (const std::exception& e) {
+                    std::cerr << "[UserManage] Invalid time slot format in relationship: " << std::get<3>(rel) << std::endl;
+                }
+            }
+        }
+    }
+
+    relationships.emplace_back(student_name, teacher_name, subject, time_slot);
+    std::cout << "[UserManage] Added relationship: student=" << student_name << ", teacher=" << teacher_name
+              << ", subject=" << subject << ", time_slot=" << time_slot << std::endl;
+}
+
+void UserManage::LoadRelationships(const std::string& file) {
+    std::ifstream ifs(file);
+    if (!ifs.is_open()) {
+        std::cerr << "Failed to open relationships file: " << file << ", creating empty file." << std::endl;
+        std::ofstream create_file(file);
+        create_file.close();
+        return;
+    }
+    relationships.clear();
+    std::string line;
+    while (std::getline(ifs, line)) {
+        std::istringstream iss(line);
+        std::string student_name, teacher_name, subject, time_slot;
+        if (std::getline(iss, student_name, '|') &&
+            std::getline(iss, teacher_name, '|') &&
+            std::getline(iss, subject, '|') &&
+            std::getline(iss, time_slot)) {
+            relationships.emplace_back(student_name, teacher_name, subject, time_slot);
+        }
+    }
+    //std::cout << "Loaded " << relationships.size() << " relationships from " << file << std::endl;
+    ifs.close();
+}
+
+void UserManage::SaveRelationships() {
+    std::ofstream ofs(relationship_file);
+    if (!ofs) {
+        std::cerr << "Failed to open relationships file for writing: " << relationship_file << std::endl;
+        return;
+    }
+    for (const auto& rel : relationships) {
+        ofs << std::get<0>(rel) << "|" << std::get<1>(rel) << "|" << std::get<2>(rel) << "|"
+            << std::get<3>(rel) << "\n";
+    }
+    std::cout << "Saved " << relationships.size() << " relationships to " << relationship_file << std::endl;
+    ofs.close();
+}
+
+void UserManage::AddRecord(const std::string& student_name, const std::string& teacher_name,
+                          const std::string& subject, int score, const std::string& date) {
+    records.emplace_back(student_name, teacher_name, subject, score, date);
+    std::cout << "Added record: student=" << student_name << ", teacher=" << teacher_name
+              << ", subject=" << subject << ", score=" << score << ", date=" << date << std::endl;
+}
+
+void UserManage::LoadRecords(const std::string& file) {
+    std::ifstream ifs(file);
+    if (!ifs.is_open()) {
+        std::cerr << "Failed to open records file: " << file << ", creating empty file." << std::endl;
+        std::ofstream create_file(file);
+        create_file.close();
+        return;
+    }
+    records.clear();
+    std::string line;
+    while (std::getline(ifs, line)) {
+        std::istringstream iss(line);
+        std::string student_name, teacher_name, subject, score_str, date;
+        if (std::getline(iss, student_name, '|') &&
+            std::getline(iss, teacher_name, '|') &&
+            std::getline(iss, subject, '|') &&
+            std::getline(iss, score_str, '|') &&
+            std::getline(iss, date)) {
+            try {
+                int score = std::stoi(score_str);
+                records.emplace_back(student_name, teacher_name, subject, score, date);
+            } catch (const std::exception& e) {
+                std::cerr << "Invalid record format: " << line << std::endl;
+            }
+        }
+    }
+    //std::cout << "Loaded " << records.size() << " records from " << file << std::endl;
+    ifs.close();
+}
+
+void UserManage::SaveRecords() {
+    std::ofstream ofs(record_file);
+    if (!ofs) {
+        std::cerr << "Failed to open records file for writing: " << record_file << std::endl;
+        return;
+    }
+    for (const auto& rec : records) {
+        ofs << std::get<0>(rec) << "|" << std::get<1>(rec) << "|" << std::get<2>(rec) << "|"
+            << std::get<3>(rec) << "|" << std::get<4>(rec) << "\n";
+    }
+    std::cout << "Saved " << records.size() << " records to " << record_file << std::endl;
+    ofs.close();
 }
