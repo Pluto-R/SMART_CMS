@@ -14,16 +14,13 @@ const std::string teacher_file = "/home/jqz/Desktop/Smart_CMS/teacher_info.txt";
 const std::string relationship_file = "/home/jqz/Desktop/Smart_CMS/relationships.txt";
 const std::string record_file = "/home/jqz/Desktop/Smart_CMS/student_records.txt";
 
-// SHA-256加密哈希算法
 std::string hashPasswd(const std::string& password, const std::string& salt);
-// 生成随机盐值
 std::string generateSalt(size_t length = 16);
-// 二进制转十六进制
 std::string binaryToHex(const std::string& binary);
 
 class User {
 protected:
-    std::string user_type; // 0: student, 1: teacher
+    std::string user_type;
     std::string user_name;
     std::string hash_passwd;
     std::string salt;
@@ -51,6 +48,7 @@ public:
 class Teacher : public User {
 public:
     Teacher() : User("1", "", "") {}
+    Teacher(const std::string& name) : User("1", name, "") {}
     Teacher(std::string education_, std::string character_, std::vector<std::string> subjects_,
             uint16_t price_min_, uint16_t price_high_, std::vector<std::string> allow_location_,
             std::vector<std::pair<std::string, std::pair<int, int>>> available_times_)
@@ -78,12 +76,10 @@ public:
             }
             int t_start = time.second.first;
             int t_end = time.second.second;
-            // No overlap
             if (end <= t_start || start >= t_end) {
                 new_times.push_back(time);
                 continue;
             }
-            // Add non-overlapping segments
             if (start > t_start) {
                 new_times.emplace_back(weekday, std::make_pair(t_start, start));
             }
@@ -100,10 +96,10 @@ public:
             int t_start = time.second.first;
             int t_end = time.second.second;
             if (start < t_end && end > t_start) {
-                return true; // Overlap exists
+                return true;
             }
         }
-        return false; // No conflict
+        return false;
     }
 
     std::string ToTeachfilestring();
@@ -126,7 +122,7 @@ public:
         auto it = teachers.find(name);
         return it != teachers.end() ? it->second.get() : nullptr;
     }
-    
+
     UserManage(std::string user_file, std::string teacher_file) {
         LoadUsers(user_file);
         LoadTeachers(teacher_file);
@@ -134,8 +130,9 @@ public:
         LoadRecords(record_file);
     }
 
+    bool CompleteTeacherProfile(const std::string& name);
     bool Login(const std::string& type, const std::string& name, const std::string& passwd) const;
-    void Registered(const std::string& type, const std::string& name, const std::string& passwd);
+    bool Registered(const std::string& type, const std::string& name, const std::string& passwd);
     bool Delete(const std::string& name);
     std::unique_ptr<User>& FindUser(const std::string& name);
     std::unique_ptr<Teacher>& FindTeacher(const std::string& name);

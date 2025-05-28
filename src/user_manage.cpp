@@ -3,6 +3,7 @@
 #include <sstream>
 #include <iostream>
 #include <limits>
+#include <openssl/evp.h>
 
 std::string hashPasswd(const std::string& password, const std::string& salt) {
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
@@ -39,87 +40,107 @@ std::string binaryToHex(const std::string& binary) {
     return hex;
 }
 
-void UserManage::Registered(const std::string& type, const std::string& name, const std::string& passwd) {
-    if (users.find(name) == users.end()) {
-        users.emplace(name, std::make_unique<User>(type, name, passwd));
-        std::cout << "Success register!" << std::endl;
-        SaveUsers();
-
-        if (type == "1") {
-            std::string education;
-            std::string character;
-            std::vector<std::string> subjects;
-            uint16_t price_min, price_high;
-            std::vector<std::string> locations;
-            std::vector<std::pair<std::string, std::pair<int, int>>> available_times;
-
-            std::cout << "请输入老师的学历: 0:大学生家教 1:在职教师 2:特级教师: ";
-            std::cin >> education;
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-
-            std::cout << "请输入您期望的老师的性格：0：亲和型 1：权威型: ";
-            std::cin >> character;
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-
-            std::cout << "输入您教学科目（以逗号分隔）：";
-            std::string subjects_str;
-            std::getline(std::cin, subjects_str);
-            std::istringstream subjects_ss(subjects_str);
-            std::string subject;
-            while (std::getline(subjects_ss, subject, ',')) {
-                if (!subject.empty()) {
-                    subjects.push_back(subject);
-                }
-            }
-
-            std::cout << "输入最小价格: ";
-            std::cin >> price_min;
-
-            std::cout << "输入最大价格: ";
-            std::cin >> price_high;
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-
-            std::cout << "输入可教学的地点（以逗号分隔）: ";
-            std::string locations_str;
-            std::getline(std::cin, locations_str);
-            std::istringstream locations_ss(locations_str);
-            std::string location;
-            while (std::getline(locations_ss, location, ',')) {
-                if (!location.empty()) {
-                    locations.push_back(location);
-                }
-            }
-
-            std::cout << "输入可用时间（格式: Tue,1200,1400/Wed,1400,1700）：";
-            std::string times_str;
-            std::getline(std::cin, times_str);
-            std::istringstream times_ss(times_str);
-            std::string time_entry;
-            while (std::getline(times_ss, time_entry, '/')) {
-                std::istringstream entry_ss(time_entry);
-                std::string day, start_str, end_str;
-                if (std::getline(entry_ss, day, ',') &&
-                    std::getline(entry_ss, start_str, ',') &&
-                    std::getline(entry_ss, end_str)) {
-                    try {
-                        int start = std::stoi(start_str);
-                        int end = std::stoi(end_str);
-                        available_times.emplace_back(day, std::make_pair(start, end));
-                    } catch (const std::exception& e) {
-                        std::cout << "Invalid time format: " << time_entry << ", skipping." << std::endl;
-                    }
-                }
-            }
-
-            auto teacher = std::make_unique<Teacher>(
-                education, character, subjects, price_min, price_high, locations, available_times);
-            teacher->ChangeName(name);
-            teachers.emplace(name, std::move(teacher));
-            SaveTeachers();
-        }
-        return;
+bool UserManage::Registered(const std::string& type, const std::string& name, const std::string& passwd) {
+    if (users.find(name) != users.end()) {
+        std::cout << "Failed to register! User already exists." << std::endl;
+        return false;
     }
-    std::cout << "Failed to register!" << std::endl;
+    
+    users.emplace(name, std::make_unique<User>(type, name, passwd));
+    std::cout << "Success register!" << std::endl;
+    SaveUsers();
+
+    if (type == "1") {
+        teachers.emplace(name, std::make_unique<Teacher>(name));
+        SaveTeachers();
+    }
+    return true;
+}
+
+bool UserManage::CompleteTeacherProfile(const std::string& name) {
+    auto it = teachers.find(name);
+    if (it == teachers.end()) {
+        std::cout << "Teacher not found: " << name << std::endl;
+        return false;
+    }
+
+    Teacher& teacher = *it->second;
+    
+    std::string education;
+    std::string character;
+    std::vector<std::string> subjects;
+    uint16_t price_min, price_high;
+    std::vector<std::string> locations;
+    std::vector<std::pair<std::string, std::pair<int, int>>> available_times;
+
+    std::cout << "请输入老师的学历: 0:大学生家教 1:在职教师 2:特级教师: ";
+    std::cin >> education;
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+    std::cout << "请输入您的性格：0：亲和型 1：权威型: ";
+    std::cin >> character;
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+    std::cout << "输入您教学科目（以逗号分隔）：";
+    std::string subjects_str;
+    std::getline(std::cin, subjects_str);
+    std::istringstream subjects_ss(subjects_str);
+    std::string subject;
+    while (std::getline(subjects_ss, subject, ',')) {
+        if (!subject.empty()) {
+            subjects.push_back(subject);
+        }
+    }
+
+    std::cout << "输入最小价格: ";
+    std::cin >> price_min;
+
+    std::cout << "输入最大价格: ";
+    std::cin >> price_high;
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+    std::cout << "输入可教学的地点（以逗号分隔）: ";
+    std::string locations_str;
+    std::getline(std::cin, locations_str);
+    std::istringstream locations_ss(locations_str);
+    std::string location;
+    while (std::getline(locations_ss, location, ',')) {
+        if (!location.empty()) {
+            locations.push_back(location);
+        }
+    }
+
+    std::cout << "输入可用时间（格式: Tue,1200,1400/Wed,1400,1700）：";
+    std::string times_str;
+    std::getline(std::cin, times_str);
+    std::istringstream times_ss(times_str);
+    std::string time_entry;
+    while (std::getline(times_ss, time_entry, '/')) {
+        std::istringstream entry_ss(time_entry);
+        std::string day, start_str, end_str;
+        if (std::getline(entry_ss, day, ',') &&
+            std::getline(entry_ss, start_str, ',') &&
+            std::getline(entry_ss, end_str)) {
+            try {
+                int start = std::stoi(start_str);
+                int end = std::stoi(end_str);
+                available_times.emplace_back(day, std::make_pair(start, end));
+            } catch (const std::exception& e) {
+                std::cout << "Invalid time format: " << time_entry << ", skipping." << std::endl;
+            }
+        }
+    }
+
+    teacher.education = education;
+    teacher.character = character;
+    teacher.subjects = subjects;
+    teacher.price_min = price_min;
+    teacher.price_high = price_high;
+    teacher.allow_location = locations;
+    teacher.available_times = available_times;
+
+    SaveTeachers();
+    return true;
 }
 
 std::unique_ptr<User>& UserManage::FindUser(const std::string& name) {
@@ -170,7 +191,6 @@ void UserManage::LoadUsers(std::string user_file) {
             users.insert({user->GetName(), std::move(user)});
         }
     }
-    //std::cout << "Loaded " << users.size() << " users from " << user_file << std::endl;
 }
 
 void UserManage::LoadTeachers(std::string teacher_file) {
@@ -189,7 +209,7 @@ void UserManage::LoadTeachers(std::string teacher_file) {
             }
         }
     }
-    //std::cout << "Loaded " << teachers.size() << " teachers from " << teacher_file << std::endl;
+    // std::cout << "Loaded " << teachers.size() << " teachers from " << teacher_file << std::endl;
 }
 
 void UserManage::SaveUsers() {
@@ -256,7 +276,6 @@ std::unique_ptr<User> UserManage::fromFile(const std::string& data) {
         ptr->ChangeType(type);
         ptr->ChangeHash(hash);
         ptr->ChangeSalt(salt);
-        //std::cout << "Loaded user: name=" << ptr->GetName() << ", type=" << ptr->GetType() << std::endl;
         return ptr;
     }
     return nullptr;
@@ -281,6 +300,7 @@ std::unique_ptr<Teacher> UserManage::fromTeachFile(const std::string& data) {
     teacher_info->ChangeName(name);
     teacher_info->education = education;
     teacher_info->character = character;
+    
     std::istringstream course_ss(course);
     std::string subject;
     while (std::getline(course_ss, subject, ',')) {
@@ -321,8 +341,6 @@ std::unique_ptr<Teacher> UserManage::fromTeachFile(const std::string& data) {
             }
         }
     }
-    // std::cout << "Loaded teacher: name=" << teacher_info->GetName() << ", education=" << teacher_info->education
-    //           << ", subjects=" << course << ", times=" << times << std::endl;
 
     return teacher_info;
 }
@@ -395,7 +413,6 @@ void UserManage::LoadRelationships(const std::string& file) {
             relationships.emplace_back(student_name, teacher_name, subject, time_slot);
         }
     }
-    //std::cout << "Loaded " << relationships.size() << " relationships from " << file << std::endl;
     ifs.close();
 }
 
@@ -446,7 +463,6 @@ void UserManage::LoadRecords(const std::string& file) {
             }
         }
     }
-    //std::cout << "Loaded " << records.size() << " records from " << file << std::endl;
     ifs.close();
 }
 
@@ -462,4 +478,47 @@ void UserManage::SaveRecords() {
     }
     std::cout << "Saved " << records.size() << " records to " << record_file << std::endl;
     ofs.close();
+}
+
+bool UserManage::Delete(const std::string& name) {
+    auto user_it = users.find(name);
+    if (user_it == users.end()) {
+        std::cout << "User not found: " << name << std::endl;
+        return false;
+    }
+
+    // Remove from users map
+    users.erase(user_it);
+
+    // Remove from teachers map if exists
+    auto teacher_it = teachers.find(name);
+    if (teacher_it != teachers.end()) {
+        teachers.erase(teacher_it);
+    }
+
+    // Remove related relationships
+    relationships.erase(
+        std::remove_if(relationships.begin(), relationships.end(),
+            [&name](const auto& rel) {
+                return std::get<0>(rel) == name || std::get<1>(rel) == name;
+            }),
+        relationships.end()
+    );
+
+    // Remove related records
+    records.erase(
+        std::remove_if(records.begin(), records.end(),
+            [&name](const auto& rec) {
+                return std::get<0>(rec) == name || std::get<1>(rec) == name;
+            }),
+        records.end()
+    );
+
+    SaveUsers();
+    SaveTeachers();
+    SaveRelationships();
+    SaveRecords();
+
+    std::cout << "Successfully deleted user: " << name << std::endl;
+    return true;
 }

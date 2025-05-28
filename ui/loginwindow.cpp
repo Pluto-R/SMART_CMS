@@ -2,6 +2,7 @@
 #include "ui_loginwindow.h"
 #include "studentwindow.h"
 #include "teacherwindow.h"
+#include <QMessageBox>
 
 LoginWindow::LoginWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -36,11 +37,15 @@ void LoginWindow::on_registerButton_clicked()
         return;
     }
     
-    userManage->Registered(userType.toStdString(), 
-                         username.toStdString(), 
-                         password.toStdString());
+    bool success = userManage->Registered(userType.toStdString(), 
+                                        username.toStdString(), 
+                                        password.toStdString());
     
-    QMessageBox::information(this, "注册成功", "用户注册成功！");
+    if(success) {
+        QMessageBox::information(this, "注册成功", "用户注册成功！");
+    } else {
+        QMessageBox::warning(this, "注册失败", "用户名已存在");
+    }
 }
 
 void LoginWindow::on_loginButton_clicked()
