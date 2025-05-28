@@ -2,19 +2,13 @@
 #include "ui_teacherwindow.h"
 #include "scoreanalysisdialog.h"
 #include "loginwindow.h"
-#include <QMessageBox>
 
-TeacherWindow::TeacherWindow(const QString &username, std::unique_ptr<UserManage> userManage, QWidget *parent)
-    : QMainWindow(parent)
-    , ui(new Ui::TeacherWindow)
-    , username(username)
-    , userManage(std::move(userManage))
-    , scoreAnalysisDialog(nullptr)
+TeacherWindow::TeacherWindow(const QString &username, UserManage *userManage, QWidget *parent)
+    : QMainWindow(parent), ui(new Ui::TeacherWindow), username(username), userManage(userManage)
 {
     ui->setupUi(this);
     setWindowTitle("教师界面 - " + username);
-    
-    // 延迟创建对话框，直到需要时
+    scoreAnalysisDialog = nullptr; // 延迟初始化
 }
 
 TeacherWindow::~TeacherWindow()
@@ -26,14 +20,14 @@ TeacherWindow::~TeacherWindow()
 void TeacherWindow::on_analyzeScoresButton_clicked()
 {
     if (!scoreAnalysisDialog) {
-        scoreAnalysisDialog = new ScoreAnalysisDialog(userManage.get(), username, this);
+        scoreAnalysisDialog = new ScoreAnalysisDialog(userManage, username, this);
     }
     scoreAnalysisDialog->show();
 }
 
 void TeacherWindow::on_logoutButton_clicked()
 {
-    auto *loginWindow = new LoginWindow();
+    auto *loginWindow = new LoginWindow(nullptr); // 确保无父对象
     loginWindow->show();
     this->close();
 }

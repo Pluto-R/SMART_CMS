@@ -2,31 +2,29 @@
 #define MATCHINGDIALOG_H
 
 #include <QDialog>
-#include <memory>
 #include "user_manage.hpp"
 
-namespace Ui {
-class MatchingDialog;
-}
+QT_BEGIN_NAMESPACE
+namespace Ui { class MatchingDialog; }
+QT_END_NAMESPACE
 
 class MatchingDialog : public QDialog
 {
     Q_OBJECT
 
 public:
-    explicit MatchingDialog(UserManage *userManage, const QString &studentName, QWidget *parent = nullptr);
-    ~MatchingDialog() override;
+    MatchingDialog(UserManage *userManage, const QString &studentName, QWidget *parent = nullptr);
+    ~MatchingDialog();
 
 private slots:
     void on_searchButton_clicked();
     void on_selectButton_clicked();
 
 private:
+    void setupUi();
+
     Ui::MatchingDialog *ui;
     UserManage *userManage;
     QString studentName;
-    
-    void setupUi();
 };
-
 #endif // MATCHINGDIALOG_H

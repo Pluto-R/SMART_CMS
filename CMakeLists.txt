@@ -2,11 +2,13 @@ cmake_minimum_required(VERSION 3.5)
 project(Smart_CMS)
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt5 REQUIRED COMPONENTS Widgets)
+# Find Qt5 with Widgets and Charts components
+find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets Charts)
 find_package(SFML 2.5 COMPONENTS graphics window system REQUIRED)
 find_package(OpenSSL REQUIRED)
 
@@ -49,8 +51,11 @@ set(HEADERS
 
 add_executable(Smart_CMS ${SOURCES} ${HEADERS} ${UI_FILES} resources/styles.qrc)
 
-target_link_libraries(Smart_CMS 
+target_link_libraries(Smart_CMS PRIVATE
+    Qt5::Core
+    Qt5::Gui
     Qt5::Widgets
+    Qt5::Charts
     sfml-graphics
     sfml-window
     sfml-system

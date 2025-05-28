@@ -1,21 +1,11 @@
-#include "loginwindow.h"
 #include <QApplication>
-#include <QFile>        // 添加这个头文件
-#include <QIODevice>    // 添加这个头文件
+#include "loginwindow.h"
 
 int main(int argc, char *argv[])
 {
-    QApplication a(argc, argv);
-    
-    // 加载样式表
-    QFile styleFile(":/styles/style.css");
-    if(styleFile.open(QIODevice::ReadOnly)) {
-        QString styleSheet = QLatin1String(styleFile.readAll());
-        a.setStyleSheet(styleSheet);
-        styleFile.close();
-    }
-    
+    QApplication app(argc, argv);
+    app.setQuitOnLastWindowClosed(false); // 防止最后一个窗口关闭时退出
     LoginWindow w;
     w.show();
-    return a.exec();
+    return app.exec();
 }

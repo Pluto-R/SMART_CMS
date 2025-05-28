@@ -2,7 +2,6 @@
 #define STUDENTWINDOW_H
 
 #include <QMainWindow>
-#include <memory>
 #include "user_manage.hpp"
 
 QT_BEGIN_NAMESPACE
@@ -18,7 +17,7 @@ class StudentWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    StudentWindow(const QString &username, std::unique_ptr<UserManage> userManage, QWidget *parent = nullptr);
+    StudentWindow(const QString &username, UserManage *userManage, QWidget *parent = nullptr);
     ~StudentWindow();
 
 private slots:
@@ -30,7 +29,7 @@ private slots:
 private:
     Ui::StudentWindow *ui;
     QString username;
-    std::unique_ptr<UserManage> userManage;
+    UserManage *userManage; // 修改为裸指针
     MatchingDialog *matchingDialog;
     ScoreAnalysisDialog *scoreAnalysisDialog;
     ScoreInputDialog *scoreInputDialog;

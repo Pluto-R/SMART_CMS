@@ -16,7 +16,7 @@ class TeacherWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    TeacherWindow(const QString &username, std::unique_ptr<UserManage> userManage, QWidget *parent = nullptr);
+    TeacherWindow(const QString &username, UserManage *userManage, QWidget *parent = nullptr);
     ~TeacherWindow();
 
 private slots:
@@ -26,7 +26,7 @@ private slots:
 private:
     Ui::TeacherWindow *ui;
     QString username;
-    std::unique_ptr<UserManage> userManage;
+    UserManage *userManage; // 修改为裸指针
     ScoreAnalysisDialog *scoreAnalysisDialog;
 };
 #endif // TEACHERWINDOW_H

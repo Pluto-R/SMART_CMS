@@ -4,20 +4,16 @@
 #include "scoreanalysisdialog.h"
 #include "scoreinputdialog.h"
 #include "loginwindow.h"
+#include <QDebug>
 
-StudentWindow::StudentWindow(const QString &username, std::unique_ptr<UserManage> userManage, QWidget *parent)
-    : QMainWindow(parent)
-    , ui(new Ui::StudentWindow)
-    , username(username)
-    , userManage(std::move(userManage))
+StudentWindow::StudentWindow(const QString &username, UserManage *userManage, QWidget *parent)
+    : QMainWindow(parent), ui(new Ui::StudentWindow), username(username), userManage(userManage),
+      matchingDialog(nullptr), scoreAnalysisDialog(nullptr), scoreInputDialog(nullptr)
 {
+    qDebug() << "Initializing StudentWindow for user:" << username;
     ui->setupUi(this);
     setWindowTitle("学生界面 - " + username);
-    
-    // 初始化对话框
-    matchingDialog = new MatchingDialog(userManage.get(), username, this);
-    scoreAnalysisDialog = new ScoreAnalysisDialog(userManage.get(), username, this);
-    scoreInputDialog = new ScoreInputDialog(userManage.get(), username, this);
+    qDebug() << "StudentWindow UI setup completed";
 }
 
 StudentWindow::~StudentWindow()
@@ -30,22 +26,31 @@ StudentWindow::~StudentWindow()
 
 void StudentWindow::on_matchTeacherButton_clicked()
 {
+    if (!matchingDialog) {
+        matchingDialog = new MatchingDialog(userManage, username, this);
+    }
     matchingDialog->show();
 }
 
 void StudentWindow::on_analyzeScoresButton_clicked()
 {
+    if (!scoreAnalysisDialog) {
+        scoreAnalysisDialog = new ScoreAnalysisDialog(userManage, username, this);
+    }
     scoreAnalysisDialog->show();
 }
 
 void StudentWindow::on_inputScoreButton_clicked()
 {
+    if (!scoreInputDialog) {
+        scoreInputDialog = new ScoreInputDialog(userManage, username, this);
+    }
     scoreInputDialog->show();
 }
 
 void StudentWindow::on_logoutButton_clicked()
 {
-    auto *loginWindow = new LoginWindow();
+    auto *loginWindow = new LoginWindow(nullptr);
     loginWindow->show();
     this->close();
 }

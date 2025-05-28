@@ -2,18 +2,25 @@
 #include <algorithm>
 #include <cmath>
 #include <set>
+#include <QDebug>
 
 MatchingManager::MatchingManager(UserManage& userManage) : userManage(userManage) {
     for (auto& pair : userManage.GetTeachers()) {
         Teacher* teacher = pair.second.get();
         if (!teacher->subjects.empty()) {
+            // subjects 已经是 std::vector<std::string>，直接使用
             for (const auto& subject : teacher->subjects) {
-                subject_index[subject].push_back(teacher);
+                if (!subject.empty()) {
+                    subject_index[subject].push_back(teacher);
+                }
             }
         }
         if (!teacher->allow_location.empty()) {
+            // allow_location 已经是 std::vector<std::string>，直接使用
             for (const auto& location : teacher->allow_location) {
-                location_index[location].push_back(teacher);
+                if (!location.empty()) {
+                    location_index[location].push_back(teacher);
+                }
             }
         }
         price_tree.insert(teacher);
@@ -27,15 +34,15 @@ double MatchingManager::calculateScore(const Teacher& teacher, const MatchingCri
     double score = 0.0;
 
     // 学历匹配 (30%)
-    double degree_score = (teacher.education == criteria.education) ? 1.0 : 0.7;
+    double degree_score = criteria.education.empty() || teacher.education == criteria.education ? 1.0 : 0.7;
     score += 0.3 * degree_score;
 
     // 性格匹配 (20%)
-    double character_score = (teacher.character == criteria.character) ? 1.0 : 0.5;
+    double character_score = criteria.character.empty() || teacher.character == criteria.character ? 1.0 : 0.5;
     score += 0.2 * character_score;
 
     // 时间重叠 (20%)
-    double time_score = timeOverlap(teacher.available_times, criteria.time_slot) ? 1.0 : 0.0;
+    double time_score = criteria.time_slot.first.empty() || timeOverlap(teacher.available_times, criteria.time_slot) ? 1.0 : 0.0;
     score += 0.2 * time_score;
 
     // 价格匹配 (20%)
@@ -46,7 +53,8 @@ double MatchingManager::calculateScore(const Teacher& teacher, const MatchingCri
     score += 0.2 * price_score;
 
     // 地区匹配 (10%)
-    double location_score = (std::find(teacher.allow_location.begin(), teacher.allow_location.end(), criteria.location) != teacher.allow_location.end()) ? 1.0 : 0.0;
+    double location_score = criteria.location.empty() || 
+        std::find(teacher.allow_location.begin(), teacher.allow_location.end(), criteria.location) != teacher.allow_location.end() ? 1.0 : 0.0;
     score += 0.1 * location_score;
 
     return score;
@@ -54,6 +62,20 @@ double MatchingManager::calculateScore(const Teacher& teacher, const MatchingCri
 
 bool MatchingManager::timeOverlap(const std::vector<std::pair<std::string, std::pair<int, int>>>& teacher_times,
                                  const std::pair<std::string, std::pair<int, int>>& student_time) {
+    // 如果学生时间不指定星期，检查所有老师时间段
+    if (student_time.first.empty()) {
+        for (const auto& teacher_time : teacher_times) {
+            int t_start = teacher_time.second.first;
+            int t_end = teacher_time.second.second;
+            int s_start = student_time.second.first;
+            int s_end = student_time.second.second;
+            if (std::max(t_start, s_start) <= std::min(t_end, s_end)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    // 否则检查指定星期
     for (const auto& teacher_time : teacher_times) {
         if (teacher_time.first == student_time.first) {
             int t_start = teacher_time.second.first;
@@ -77,31 +99,57 @@ std::vector<MatchResult> MatchingManager::matchTeachers(const MatchingCriteria& 
     std::vector<MatchResult> results;
     std::set<std::string> unique_teachers; // 跟踪唯一老师姓名
 
-    // Step 1: Filter by subject (老师学科包含学生学科)
+    // Step 1: Filter by subject
+    std::vector<Teacher*> candidates;
     auto subject_it = subject_index.find(criteria.subject);
-    std::vector<Teacher*> candidates = (subject_it != subject_index.end()) ? subject_it->second : std::vector<Teacher*>();
-
-    // Step 2: Intersect with location
-    auto location_it = location_index.find(criteria.location);
-    if (location_it != location_index.end()) {
-        candidates = price_tree.intersect(candidates, location_it->second);
+    if (subject_it != subject_index.end()) {
+        candidates = subject_it->second;
+        qDebug() << "Found" << candidates.size() << "teachers with subject" << QString::fromStdString(criteria.subject);
     } else {
-        candidates.clear();
+        qDebug() << "No teachers found for subject" << QString::fromStdString(criteria.subject);
+        return results; // 没有匹配学科，直接返回空
     }
 
-    // Step 3: Filter by price range using PriceRBTree
-    candidates = price_tree.queryRange(criteria.price_min, criteria.price_high, candidates);
+    // Step 2: Filter by location (if specified)
+    if (!criteria.location.empty()) {
+        auto location_it = location_index.find(criteria.location);
+        if (location_it != location_index.end()) {
+            candidates = price_tree.intersect(candidates, location_it->second);
+            qDebug() << "After location filter (" << QString::fromStdString(criteria.location) << "):" << candidates.size() << "candidates";
+        } else {
+            qDebug() << "No teachers found for location" << QString::fromStdString(criteria.location);
+            candidates.clear();
+        }
+    }
 
-    // Step 4: Filter by time overlap using TimeIntervalTree
-    candidates = time_tree.queryOverlap(criteria.time_slot.second, candidates);
+    // Step 3: Filter by price range
+    candidates = price_tree.queryRange(criteria.price_min, criteria.price_high, candidates);
+    qDebug() << "After price filter (" << criteria.price_min << "-" << criteria.price_high << "):" << candidates.size() << "candidates";
+
+    // Step 4: Filter by time overlap
+    if (!criteria.time_slot.first.empty() || (criteria.time_slot.second.first != 0 || criteria.time_slot.second.second != 2359)) {
+        candidates = time_tree.queryOverlap(criteria.time_slot.second, candidates);
+        qDebug() << "After time filter (" << criteria.time_slot.second.first << "-" << criteria.time_slot.second.second << "):" << candidates.size() << "candidates";
+    }
 
     // Step 5: Apply additional filters and calculate scores
     for (Teacher* teacher_ptr : candidates) {
-        if (teacher_ptr->education != criteria.education) continue;
-        if (teacher_ptr->character != criteria.character) continue;
-        if (!timeOverlap(teacher_ptr->available_times, criteria.time_slot)) continue;
-        if (!priceOverlap(teacher_ptr->price_min, teacher_ptr->price_high, 
-                          criteria.price_min, criteria.price_high)) continue;
+        if (!criteria.education.empty() && teacher_ptr->education != criteria.education) {
+            qDebug() << "Teacher" << QString::fromStdString(teacher_ptr->GetName()) << "skipped: education" << QString::fromStdString(teacher_ptr->education) << "!=" << QString::fromStdString(criteria.education);
+            continue;
+        }
+        if (!criteria.character.empty() && teacher_ptr->character != criteria.character) {
+            qDebug() << "Teacher" << QString::fromStdString(teacher_ptr->GetName()) << "skipped: character" << QString::fromStdString(teacher_ptr->character) << "!=" << QString::fromStdString(criteria.character);
+            continue;
+        }
+        if (!criteria.time_slot.first.empty() && !timeOverlap(teacher_ptr->available_times, criteria.time_slot)) {
+            qDebug() << "Teacher" << QString::fromStdString(teacher_ptr->GetName()) << "skipped: no time overlap";
+            continue;
+        }
+        if (!priceOverlap(teacher_ptr->price_min, teacher_ptr->price_high, criteria.price_min, criteria.price_high)) {
+            qDebug() << "Teacher" << QString::fromStdString(teacher_ptr->GetName()) << "skipped: price" << teacher_ptr->price_min << "-" << teacher_ptr->price_high << "not in" << criteria.price_min << "-" << criteria.price_high;
+            continue;
+        }
 
         // 仅添加未重复的老师
         if (unique_teachers.find(teacher_ptr->GetName()) == unique_teachers.end()) {
@@ -109,6 +157,7 @@ std::vector<MatchResult> MatchingManager::matchTeachers(const MatchingCriteria& 
             if (score > 0.0) {
                 results.push_back({std::make_unique<Teacher>(*teacher_ptr), score});
                 unique_teachers.insert(teacher_ptr->GetName());
+                qDebug() << "Teacher" << QString::fromStdString(teacher_ptr->GetName()) << "added with score" << score;
             }
         }
     }
@@ -119,6 +168,7 @@ std::vector<MatchResult> MatchingManager::matchTeachers(const MatchingCriteria& 
     });
     if (results.size() > 5) results.resize(5);
 
+    qDebug() << "Final results:" << results.size() << "teachers";
     return results;
 }
 

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>800</width>
-    <height>600</height>
+    <width>600</width>
+    <height>400</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -15,28 +15,28 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="QLabel" name="subjectLabel">
-     <property name="text">
-      <string>输入学科:</string>
-     </property>
-    </widget>
+    <layout class="QHBoxLayout" name="horizontalLayout">
+     <item>
+      <widget class="QLabel" name="label">
+       <property name="text">
+        <string>选择学科：</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="subjectComboBox"/>
+     </item>
+     <item>
+      <widget class="QPushButton" name="analyzeButton">
+       <property name="text">
+        <string>分析</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
    </item>
    <item>
-    <widget class="QLineEdit" name="subjectLineEdit"/>
-   </item>
-   <item>
-    <widget class="QComboBox" name="subjectComboBox">
-     <property name="visible">
-      <bool>false</bool>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QPushButton" name="analyzeButton">
-     <property name="text">
-      <string>分析</string>
-     </property>
-    </widget>
+    <layout class="QVBoxLayout" name="chartLayout"/>
    </item>
   </layout>
  </widget>

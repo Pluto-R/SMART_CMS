@@ -1,79 +1,110 @@
 #include "scoreanalysisdialog.h"
 #include "ui_scoreanalysisdialog.h"
 #include <QMessageBox>
+#include <QDebug>
+#include <QtCharts/QChartView>
+#include <QtCharts/QLineSeries>
+#include <QtCharts/QDateTimeAxis>
+#include <QtCharts/QValueAxis>
+#include <QDateTime>
+#include <algorithm>
+#include <set>
 
-ScoreAnalysisDialog::ScoreAnalysisDialog(UserManage *userManage, const QString &username, QWidget *parent) :
-    QDialog(parent),
-    ui(new Ui::ScoreAnalysisDialog),
-    userManage(userManage),
-    username(username)
+QT_CHARTS_USE_NAMESPACE
+
+ScoreAnalysisDialog::ScoreAnalysisDialog(UserManage* userManage, const QString& studentName, QWidget* parent)
+    : QDialog(parent),
+      ui(new Ui::ScoreAnalysisDialog),
+      userManage(userManage),
+      studentName(studentName)
 {
     ui->setupUi(this);
     setWindowTitle("成绩分析");
-    
-    isTeacher = (userManage->FindUser(username.toStdString())->GetType() == "1");
-    
-    sfmlCanvas = new QSFMLCanvas(this);
-    ui->verticalLayout->addWidget(sfmlCanvas);
-    
-    if(isTeacher) {
-        ui->subjectLabel->setText("选择学科:");
-        ui->subjectLineEdit->setVisible(false);
-        ui->subjectComboBox->setVisible(true);
-        
-        // 使用原始指针避免unique_ptr问题
-        Teacher* teacher = userManage->FindTeacherRaw(username.toStdString());
-        if(teacher) {
-            for(const auto& subject : teacher->subjects) {
-                ui->subjectComboBox->addItem(QString::fromStdString(subject));
-            }
+
+    // 设置学科选项
+    ui->subjectComboBox->clear();
+    ui->subjectComboBox->addItem("请选择学科", "");
+    std::set<std::string> subjects;
+    for (const auto& record : userManage->GetRecords()) {
+        if (std::get<0>(record) == studentName.toStdString()) {
+            subjects.insert(std::get<2>(record));
         }
-    } else {
-        ui->subjectLabel->setText("输入学科:");
-        ui->subjectLineEdit->setVisible(true);
-        ui->subjectComboBox->setVisible(false);
+    }
+    for (const auto& subject : subjects) {
+        ui->subjectComboBox->addItem(QString::fromStdString(subject), QString::fromStdString(subject));
     }
 }
 
 ScoreAnalysisDialog::~ScoreAnalysisDialog()
 {
     delete ui;
-    delete sfmlCanvas;
 }
 
 void ScoreAnalysisDialog::on_analyzeButton_clicked()
 {
-    QString subject;
-    if(isTeacher) {
-        subject = ui->subjectComboBox->currentText();
-    } else {
-        subject = ui->subjectLineEdit->text();
-    }
-    
-    if(subject.isEmpty()) {
-        QMessageBox::warning(this, "错误", "请输入学科名称");
+    QString subject = ui->subjectComboBox->currentData().toString();
+    if (subject.isEmpty()) {
+        QMessageBox::critical(this, "错误", "请选择一个学科");
         return;
     }
-    
-    // 明确调用 QWidget 的 setVisible
-    sfmlCanvas->QWidget::setVisible(true);
-    sfmlCanvas->setFocus();
-    
-    // 绘制成绩图表
-    sfmlCanvas->clear(sf::Color::White);
-    
-    // 示例：绘制一个简单的坐标系
-    sf::VertexArray xAxis(sf::Lines, 2);
-    xAxis[0].position = sf::Vector2f(50, 550);
-    xAxis[1].position = sf::Vector2f(750, 550);
-    xAxis[0].color = xAxis[1].color = sf::Color::Black;
-    
-    sf::VertexArray yAxis(sf::Lines, 2);
-    yAxis[0].position = sf::Vector2f(50, 50);
-    yAxis[1].position = sf::Vector2f(50, 550);
-    yAxis[0].color = yAxis[1].color = sf::Color::Black;
-    
-    sfmlCanvas->draw(xAxis);
-    sfmlCanvas->draw(yAxis);
-    sfmlCanvas->display();
+
+    // 提取成绩数据
+    std::vector<std::pair<std::string, int>> scores;
+    for (const auto& record : userManage->GetRecords()) {
+        if (std::get<0>(record) == studentName.toStdString() &&
+            std::get<2>(record) == subject.toStdString()) {
+            scores.emplace_back(std::get<4>(record), std::get<3>(record));
+        }
+    }
+
+    if (scores.empty()) {
+        QMessageBox::information(this, "提示", "该学科暂无成绩记录");
+        return;
+    }
+
+    // 按日期排序
+    std::sort(scores.begin(), scores.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
+
+    // 创建折线图
+    QLineSeries* series = new QLineSeries();
+    for (const auto& score : scores) {
+        QDateTime date = QDateTime::fromString(QString::fromStdString(score.first), "yyyy-MM-dd");
+        if (date.isValid()) {
+            series->append(date.toMSecsSinceEpoch(), score.second);
+        }
+    }
+
+    if (series->count() == 0) {
+        QMessageBox::critical(this, "错误", "无效的日期格式，无法绘制图表");
+        delete series;
+        return;
+    }
+
+    // 创建图表
+    QChart* chart = new QChart();
+    chart->addSeries(series);
+    chart->setTitle(subject + " 成绩趋势");
+
+    // 设置 X 轴（日期）
+    QDateTimeAxis* axisX = new QDateTimeAxis();
+    axisX->setFormat("yyyy-MM-dd");
+    axisX->setTitleText("日期");
+    chart->addAxis(axisX, Qt::AlignBottom);
+    series->attachAxis(axisX);
+
+    // 设置 Y 轴（成绩，0～150）
+    QValueAxis* axisY = new QValueAxis();
+    axisY->setRange(0, 150);
+    axisY->setTitleText("成绩");
+    axisY->setLabelFormat("%i");
+    chart->addAxis(axisY, Qt::AlignLeft);
+    series->attachAxis(axisY);
+
+    // 设置图表视图
+    QChartView* chartView = new QChartView(chart, this);
+    chartView->setRenderHint(QPainter::Antialiasing);
+    ui->chartLayout->addWidget(chartView); // 假设 UI 有 chartLayout
+
+    qDebug() << "Generated chart for" << subject << "with" << scores.size() << "records";
 }

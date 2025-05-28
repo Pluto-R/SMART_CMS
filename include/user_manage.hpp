@@ -9,10 +9,10 @@
 #include <utility>
 #include <tuple>
 
-const std::string user_file = "/home/jqz/Desktop/Smart_CMS/users.txt";
-const std::string teacher_file = "/home/jqz/Desktop/Smart_CMS/teacher_info.txt";
-const std::string relationship_file = "/home/jqz/Desktop/Smart_CMS/relationships.txt";
-const std::string record_file = "/home/jqz/Desktop/Smart_CMS/student_records.txt";
+const std::string user_file = "/home/jqz/SMART_CMS/users.txt";
+const std::string teacher_file = "/home/jqz/SMART_CMS/teacher_info.txt";
+const std::string relationship_file = "/home/jqz/SMART_CMS/relationships.txt";
+const std::string record_file = "/home/jqz/SMART_CMS/student_records.txt";
 
 std::string hashPasswd(const std::string& password, const std::string& salt);
 std::string generateSalt(size_t length = 16);
@@ -25,21 +25,21 @@ protected:
     std::string hash_passwd;
     std::string salt;
 public:
-    friend std::unique_ptr<User> fromFileString(const std::string&);
+    friend std::unique_ptr<User> fromFile(const std::string&);
     User(const std::string type, const std::string& name, const std::string& passwd)
-        : user_type(type), user_name(name), hash_passwd(passwd), salt(generateSalt()) {
+        : user_type(type), user_name(name), salt(generateSalt()) {
         hash_passwd = binaryToHex(hashPasswd(passwd, salt));
     }
 
-    std::string GetType() { return user_type; }
-    std::string Gethash_passwd() { return hash_passwd; }
-    std::string Getsalt() { return salt; }
-    std::string GetName() { return user_name; }
+    std::string GetType() const { return user_type; }
+    std::string Gethash_passwd() const { return hash_passwd; }
+    std::string Getsalt() const { return salt; }
+    std::string GetName() const { return user_name; }
 
-    void ChangeType(std::string type) { user_type = type; }
-    void ChangeName(std::string name) { user_name = name; }
-    void ChangeHash(std::string hash) { hash_passwd = hash; }
-    void ChangeSalt(std::string salt_) { salt = salt_; }
+    void ChangeType(const std::string& type) { user_type = type; }
+    void ChangeName(const std::string& name) { user_name = name; }
+    void ChangeHash(const std::string& hash) { hash_passwd = hash; }
+    void ChangeSalt(const std::string& salt_) { salt = salt_; }
     virtual ~User() = default;
 
     virtual std::string Tofilestring();
@@ -123,7 +123,11 @@ public:
         return it != teachers.end() ? it->second.get() : nullptr;
     }
 
-    UserManage(std::string user_file, std::string teacher_file) {
+    void AddRelationship(const std::string& student_name, const std::string& teacher_name,
+                     const std::string& subject, const std::string& student_time_slot,
+                     std::string& selected_teacher_time_slot);
+
+    UserManage(std::string user_file = user_file, std::string teacher_file = teacher_file) {
         LoadUsers(user_file);
         LoadTeachers(teacher_file);
         LoadRelationships(relationship_file);
@@ -165,6 +169,9 @@ public:
     std::vector<std::tuple<std::string, std::string, std::string, int, std::string>>& GetRecords() {
         return records;
     }
+
+    void updateTeacherTime(const std::string& teacher_name, const std::string& weekday,
+                           int start, int end);
 };
 
 #endif
