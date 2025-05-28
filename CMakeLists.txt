@@ -1,50 +1,59 @@
-cmake_minimum_required(VERSION 3.10)
-project(EduMatchSystem VERSION 1.0 LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.5)
+project(Smart_CMS)
 
-# 设置 C++ 标准
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
 
-# 设置调试选项
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    add_compile_options(-g -O0 -Wall -Wextra -pedantic)
-    message(STATUS "Building in DEBUG mode")
-else()
-    add_compile_options(-O2)
-    message(STATUS "Building in RELEASE mode")
-endif()
-
-# 查找依赖库
-find_package(OpenSSL REQUIRED)
+find_package(Qt5 REQUIRED COMPONENTS Widgets)
 find_package(SFML 2.5 COMPONENTS graphics window system REQUIRED)
+find_package(OpenSSL REQUIRED)
 
-# 包含头文件目录
-include_directories(${CMAKE_SOURCE_DIR}/include)
-
-# 收集源文件
-set(SOURCES
-    src/main.cpp
-    src/user_manage.cpp
-    src/matching.cpp
-    src/course_schedule.cpp
-    src/analysis.cpp
+include_directories(
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui
+    ${SFML_INCLUDE_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR}
 )
 
-# 生成可执行文件
-add_executable(EduMatchSystem ${SOURCES})
+file(GLOB UI_FILES "ui/*.ui")
 
-# 链接库
-target_link_libraries(EduMatchSystem PRIVATE
-    OpenSSL::SSL
-    OpenSSL::Crypto
+set(SOURCES
+    src/main.cpp
+    src/QSFMLCanvas.cpp
+    src/analysis.cpp
+    src/matching.cpp
+    src/user_manage.cpp
+    ui/loginwindow.cpp
+    ui/studentwindow.cpp
+    ui/teacherwindow.cpp
+    ui/matchingdialog.cpp
+    ui/scoreanalysisdialog.cpp
+    ui/scoreinputdialog.cpp
+)
+
+set(HEADERS
+    include/QSFMLCanvas.hpp
+    include/analysis.hpp
+    include/config.hpp
+    include/matching.hpp
+    include/user_manage.hpp
+    ui/loginwindow.h
+    ui/studentwindow.h
+    ui/teacherwindow.h
+    ui/matchingdialog.h
+    ui/scoreanalysisdialog.h
+    ui/scoreinputdialog.h
+)
+
+add_executable(Smart_CMS ${SOURCES} ${HEADERS} ${UI_FILES} resources/styles.qrc)
+
+target_link_libraries(Smart_CMS 
+    Qt5::Widgets
     sfml-graphics
     sfml-window
     sfml-system
+    OpenSSL::SSL
+    OpenSSL::Crypto
 )
-
-# 设置编译选项
-target_compile_options(EduMatchSystem PRIVATE -Wall -Wextra)
-
-# 安装目标（可选）
-install(TARGETS EduMatchSystem DESTINATION bin)

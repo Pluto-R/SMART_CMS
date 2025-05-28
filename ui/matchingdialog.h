@@ -2,8 +2,8 @@
 #define MATCHINGDIALOG_H
 
 #include <QDialog>
+#include <memory>
 #include "user_manage.hpp"
-#include "matching.hpp"
 
 namespace Ui {
 class MatchingDialog;
@@ -15,7 +15,7 @@ class MatchingDialog : public QDialog
 
 public:
     explicit MatchingDialog(UserManage *userManage, const QString &studentName, QWidget *parent = nullptr);
-    ~MatchingDialog() override;  // 明确声明为override
+    ~MatchingDialog() override;
 
 private slots:
     void on_searchButton_clicked();

@@ -122,6 +122,11 @@ private:
     std::vector<std::tuple<std::string, std::string, std::string, int, std::string>> records;
 
 public:
+    Teacher* FindTeacherRaw(const std::string& name) {
+        auto it = teachers.find(name);
+        return it != teachers.end() ? it->second.get() : nullptr;
+    }
+    
     UserManage(std::string user_file, std::string teacher_file) {
         LoadUsers(user_file);
         LoadTeachers(teacher_file);
