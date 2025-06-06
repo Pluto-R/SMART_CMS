@@ -4,8 +4,10 @@
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
-    app.setQuitOnLastWindowClosed(false); // 防止最后一个窗口关闭时退出
-    LoginWindow w;
-    w.show();
+    app.setQuitOnLastWindowClosed(false);
+
+    LoginWindow loginWindow;
+    loginWindow.show();
+
     return app.exec();
 }

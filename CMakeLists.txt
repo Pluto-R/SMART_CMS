@@ -7,8 +7,9 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-# Find Qt5 with Widgets and Charts components
-find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets Charts)
+set(CMAKE_AUTOUIC_SEARCH_PATHS ${CMAKE_CURRENT_SOURCE_DIR}/ui ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets)
 find_package(SFML 2.5 COMPONENTS graphics window system REQUIRED)
 find_package(OpenSSL REQUIRED)
 
@@ -19,7 +20,15 @@ include_directories(
     ${CMAKE_CURRENT_BINARY_DIR}
 )
 
-file(GLOB UI_FILES "ui/*.ui")
+set(UI_FILES
+    ui/loginwindow.ui
+    ui/studentwindow.ui
+    ui/teacherwindow.ui
+    ui/matchingdialog.ui
+    ui/scoreinputdialog.ui
+    ui/registerdialog.ui
+    ui/adminwindow.ui
+)
 
 set(SOURCES
     src/main.cpp
@@ -31,8 +40,9 @@ set(SOURCES
     ui/studentwindow.cpp
     ui/teacherwindow.cpp
     ui/matchingdialog.cpp
-    ui/scoreanalysisdialog.cpp
     ui/scoreinputdialog.cpp
+    ui/registerdialog.cpp
+    ui/adminwindow.cpp
 )
 
 set(HEADERS
@@ -45,8 +55,9 @@ set(HEADERS
     ui/studentwindow.h
     ui/teacherwindow.h
     ui/matchingdialog.h
-    ui/scoreanalysisdialog.h
     ui/scoreinputdialog.h
+    ui/registerdialog.h
+    ui/adminwindow.h
 )
 
 add_executable(Smart_CMS ${SOURCES} ${HEADERS} ${UI_FILES} resources/styles.qrc)
@@ -55,7 +66,6 @@ target_link_libraries(Smart_CMS PRIVATE
     Qt5::Core
     Qt5::Gui
     Qt5::Widgets
-    Qt5::Charts
     sfml-graphics
     sfml-window
     sfml-system

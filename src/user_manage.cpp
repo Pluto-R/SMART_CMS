@@ -2,570 +2,667 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
-#include <limits>
 #include <openssl/evp.h>
 #include <QDebug>
-#include <QTextStream> // Added for Qt::endl
+#include <algorithm>
+#include <limits>
+#include <cstdlib>
+#include <ctime>
+#include <iomanip>
+#include <random>
+#include <QString>
+
+const std::string UserManage::ADMIN_TYPE = "2";
+
+std::string binaryToHex(const std::string& binary) {
+    std::stringstream ss;
+    for (unsigned char c : binary) {
+        ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(c);
+    }
+    return ss.str();
+}
+
+std::string hexToBinary(const std::string& hex) {
+    std::string binary;
+    for (size_t i = 0; i < hex.length(); i += 2) {
+        std::string byteString = hex.substr(i, 2);
+        char byte = static_cast<char>(std::stoul(byteString, nullptr, 16));
+        binary += byte;
+    }
+    return binary;
+}
 
 std::string hashPasswd(const std::string& password, const std::string& salt) {
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    if (!ctx) {
+        qDebug() << "无法创建 EVP_MD_CTX";
+        return "";
+    }
     const EVP_MD* md = EVP_sha256();
     unsigned char digest[EVP_MAX_MD_SIZE];
     unsigned int digest_len;
 
-    EVP_DigestInit_ex(ctx, md, nullptr);
-    EVP_DigestUpdate(ctx, (salt + password).c_str(), (salt + password).size());
-    EVP_DigestFinal_ex(ctx, digest, &digest_len);
-    EVP_MD_CTX_free(ctx);
+    std::string saltedPassword = salt + password;
 
+    if (EVP_DigestInit_ex(ctx, md, nullptr) != 1 ||
+        EVP_DigestUpdate(ctx, saltedPassword.c_str(), saltedPassword.size()) != 1 ||
+        EVP_DigestFinal_ex(ctx, digest, &digest_len) != 1) {
+        qDebug() << "密码哈希失败";
+        EVP_MD_CTX_free(ctx);
+        return "";
+    }
+    EVP_MD_CTX_free(ctx);
     return binaryToHex(std::string(reinterpret_cast<char*>(digest), digest_len));
 }
 
 std::string generateSalt(size_t length) {
-    static const char alphanum[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    static std::uniform_int_distribution<> dis(0, 61);
+    const std::string salt_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     std::string salt;
-    salt.reserve(length);
-
     for (size_t i = 0; i < length; ++i) {
-        salt += alphanum[rand() % (sizeof(alphanum) - 1)];
+        salt += salt_chars[dis(gen)];
     }
     return salt;
 }
 
-std::string binaryToHex(const std::string& binary) {
-    static const char hexDigits[] = "0123456789abcdef";
-    std::string hex;
-    for (unsigned char c : binary) {
-        hex += hexDigits[c >> 4];
-        hex += hexDigits[c & 0xF];
+User::User(const std::string& type, const std::string& name, const std::string& passwd)
+    : user_type(type), user_name(name), hash_passwd("") {
+    if (name.empty() || passwd.empty()) {
+        qDebug() << "用户名或密码不能为空";
+        return;
     }
-    return hex;
+    this->salt = generateSalt(16);
+    this->hash_passwd = hashPasswd(passwd, this->salt);
 }
 
-bool UserManage::Registered(const std::string& type, const std::string& name, const std::string& passwd) {
-    if (users.find(name) != users.end()) {
-        std::cout << "Failed to register! User already exists." << Qt::endl;
-        return false;
-    }
+std::string User::toFileString() {
+    return user_type + "|" + user_name + "|" + hash_passwd + "|" + salt;
+}
 
-    users.emplace(name, std::make_unique<User>(type, name, passwd));
-    std::cout << "Success register!" << Qt::endl;
+Teacher::Teacher(const std::string& name) : user_name(name), price_min(0), price_max(0) {}
+
+void Teacher::add_available_time(const std::string& weekday, int start, int end) {
+    available_times.push_back({weekday, {start, end} });
+}
+
+std::string Teacher::ToTeachfilestring() const {
+    std::stringstream ss;
+    std::string education_code = this->education;
+    std::string character_code = this->character;
+    if (education == "大学生家教") education_code = "0";
+    else if (education == "专职家教") education_code = "1";
+    else if (education == "在职教师") education_code = "2";
+    if (character == "温和型") character_code = "0";
+    else if (character == "严格型") character_code = "1";
+
+    ss << user_name << "|"
+       << education_code << "|"
+       << character_code << "|";
+    for (size_t i = 0; i < subjects.size(); ++i) {
+        ss << subjects[i];
+        if (i < subjects.size() - 1) ss << ",";
+    }
+    ss << "|"
+       << price_min << "|"
+       << price_max << "|";
+    for (size_t i = 0; i < allow_location.size(); ++i) {
+        ss << allow_location[i];
+        if (i < allow_location.size() - 1) ss << ",";
+    }
+    ss << "|";
+    for (size_t i = 0; i < available_times.size(); ++i) {
+        ss << available_times[i].first << ","
+           << available_times[i].second.first << ","
+           << available_times[i].second.second;
+        if (i < available_times.size() - 1) ss << "/";
+    }
+    ss << "|";
+    for (size_t i = 0; i < evaluations.size(); ++i) {
+        ss << evaluations[i];
+        if (i < evaluations.size() - 1) ss << "/";
+    }
+    return ss.str();
+}
+
+std::string Teacher::ToPendingfilestring() const {
+    std::stringstream ss;
+    std::string education_code = this->education;
+    std::string character_code = this->character;
+    if (education == "大学生家教") education_code = "0";
+    else if (education == "专职家教") education_code = "1";
+    else if (education == "在职教师") education_code = "2";
+    if (character == "温和型") character_code = "0";
+    else if (character == "严格型") character_code = "1";
+
+    ss << user_name << "|"
+       << education_code << "|"
+       << character_code << "|"
+       << id_number << "|";
+    for (size_t i = 0; i < subjects.size(); ++i) {
+        ss << subjects[i];
+        if (i < subjects.size() - 1) ss << ",";
+    }
+    ss << "|"
+       << price_min << "|"
+       << price_max << "|";
+    for (size_t i = 0; i < allow_location.size(); ++i) {
+        ss << allow_location[i];
+        if (i < allow_location.size() - 1) ss << ",";
+    }
+    ss << "|";
+    for (size_t i = 0; i < available_times.size(); ++i) {
+        ss << available_times[i].first << ","
+           << available_times[i].second.first << ","
+           << available_times[i].second.second;
+        if (i < available_times.size() - 1) ss << "/";
+    }
+    return ss.str();
+}
+
+UserManage::UserManage(const std::string &user_file, const std::string &teacher_file,
+                       const std::string &relationship_file, const std::string &record_file,
+                       const std::string &pending_teacher_file)
+    : user_file(user_file), teacher_file(teacher_file),
+      relationship_file(relationship_file), record_file(record_file),
+      pending_teacher_file(pending_teacher_file)
+{
+    qDebug() << "用户文件:" << QString::fromStdString(user_file);
+    qDebug() << "教师文件:" << QString::fromStdString(teacher_file);
+    qDebug() << "待审教师文件:" << QString::fromStdString(pending_teacher_file);
+    LoadUsers();
+    InitializeAdmin();
+    LoadTeachers();
+    LoadPendingTeachers();
+    LoadRelationships();
+    LoadRecords();
+    qDebug() << "UserManage 初始化完成";
+}
+
+UserManage::~UserManage() {
+    qDebug() << "UserManage 析构函数: 保存";
     SaveUsers();
-
-    if (type == "1") {
-        teachers.emplace(name, std::make_unique<Teacher>(name));
-        SaveTeachers();
-    }
-    return true;
+    SaveTeachers();
+    SavePendingTeachers();
+    SaveRelationships();
+    SaveRecords();
+    qDebug() << "UserManage 析构函数: 所有数据已保存";
 }
 
-bool UserManage::CompleteTeacherProfile(const std::string& name) {
-    auto it = teachers.find(name);
-    if (it == teachers.end()) {
-        std::cout << "Teacher not found: " << name << Qt::endl;
+void UserManage::InitializeAdmin() {
+    if (!Exist("admin")) {
+        qDebug() << "未找到 admin 用户，创建默认管理员账户";
+        auto new_user = std::make_unique<User>(ADMIN_TYPE, "admin", "admin");
+        users["admin"] = std::move(new_user);
+        SaveUsers();
+    } else {
+        qDebug() << "admin 用户已存在";
+    }
+}
+
+bool UserManage::Register(const std::string &user_type, const std::string &name, const std::string &password) {
+    std::string cleaned_name = name;
+    cleaned_name.erase(0, cleaned_name.find_first_not_of(" \t\r\n"));
+    cleaned_name.erase(cleaned_name.find_last_not_of(" \t\r\n") + 1);
+    qDebug() << "尝试注册用户:" << QString::fromStdString(cleaned_name) << " 原名:" << QString::fromStdString(name);
+
+    if (Exist(cleaned_name)) {
+        qDebug() << "注册失败：用户已存在" << QString::fromStdString(cleaned_name);
         return false;
     }
 
-    Teacher& teacher = *it->second;
-
-    std::string education, character, subjects_str, locations_str, times_str;
-    uint16_t price_min, price_high;
-    std::vector<std::string> subjects, locations;
-    std::vector<std::pair<std::string, std::pair<int, int>>> available_times;
-
-    std::cout << "请输入老师的学历: 0:大学生家教 1:在职教师 2:特级教师: ";
-    std::getline(std::cin, education);
-
-    std::cout << "请输入您的性格：0：亲和型 1：权威型: ";
-    std::getline(std::cin, character);
-
-    std::cout << "输入您教学科目（以逗号分隔）：";
-    std::getline(std::cin, subjects_str);
-    std::istringstream subjects_iss(subjects_str);
-    std::string subject;
-    while (std::getline(subjects_iss, subject, ',')) {
-        if (!subject.empty()) {
-            subjects.push_back(subject);
-        }
+    if (user_type == "0") {
+        auto newUser = std::make_unique<User>(user_type, cleaned_name, password);
+        users[cleaned_name] = std::move(newUser);
+        SaveUsers();
+        qDebug() << "新用户注册成功：" << QString::fromStdString(cleaned_name) << " 类型：" << QString::fromStdString(user_type);
+        return true;
+    } else if (user_type == "1") {
+        qDebug() << "教师注册需通过 RegisterTeacherPending 处理";
+        return false;
     }
-
-    std::cout << "输入最低价格: ";
-    std::cin >> price_min;
-
-    std::cout << "输入最高价格: ";
-    std::cin >> price_high;
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-
-    std::cout << "输入可教学的地点（以逗号分隔）: ";
-    std::getline(std::cin, locations_str);
-    std::istringstream locations_iss(locations_str);
-    std::string location;
-    while (std::getline(locations_iss, location, ',')) {
-        if (!location.empty()) {
-            locations.push_back(location);
-        }
-    }
-
-    std::cout << "输入可用时间（格式: Tue,1200,1400/Wed,0900,1100）: ";
-    std::getline(std::cin, times_str);
-    std::istringstream times_iss(times_str);
-    std::string time_entry;
-    while (std::getline(times_iss, time_entry, '/')) {
-        std::istringstream entry_ss(time_entry);
-        std::string day, start_str, end_str;
-        if (std::getline(entry_ss, day, ',') &&
-            std::getline(entry_ss, start_str, ',') &&
-            std::getline(entry_ss, end_str)) {
-            try {
-                int start = std::stoi(start_str);
-                int end = std::stoi(end_str);
-                available_times.emplace_back(day, std::make_pair(start, end));
-            } catch (const std::exception& e) {
-                std::cout << "Invalid time format: " << time_entry << ", skipping" << Qt::endl;
-            }
-        }
-    }
-
-    teacher.education = education;
-    teacher.character = character;
-    teacher.subjects = subjects;
-    teacher.price_min = price_min;
-    teacher.price_high = price_high;
-    teacher.allow_location = locations;
-    teacher.available_times = available_times;
-
-    SaveTeachers();
-    return true;
-}
-
-std::unique_ptr<User>& UserManage::FindUser(const std::string& name) {
-    auto it = users.find(name);
-    if (it != users.end() && it->second) {
-        return it->second;
-    }
-    throw std::runtime_error("User not found: " + name);
-}
-
-std::unique_ptr<Teacher>& UserManage::FindTeacher(const std::string& name) {
-    auto it = teachers.find(name);
-    if (it != teachers.end()) {
-        return it->second;
-    }
-    throw std::runtime_error("Teacher not found: " + name);
-}
-
-bool UserManage::Login(const std::string& type, const std::string& name, const std::string& passwd) const {
-    auto it = users.find(name);
-    if (it != users.end()) {
-        bool success_passwd = (it->second->Gethash_passwd() == binaryToHex(hashPasswd(passwd, it->second->Getsalt())));
-        bool success_type = (it->second->GetType() == type);
-        if (success_passwd && success_type) {
-            std::cout << "Success to login!" << Qt::endl;
-            return true;
-        } else {
-            if (!success_type) std::cout << "The type is error!" << Qt::endl;
-            if (!success_passwd) std::cout << "The passwd is error!" << Qt::endl;
-            return false;
-        }
-    }
-    std::cout << "Failed to login! Not exist user!" << Qt::endl;
+    qDebug() << "无效的用户类型：" << QString::fromStdString(user_type);
     return false;
 }
 
-void UserManage::LoadUsers(std::string user_file) {
-    std::ifstream file(user_file);
-    if (!file) {
-        std::cerr << "Failed to open users file: " << user_file << Qt::endl;
-        return;
+bool UserManage::RegisterTeacherPending(const std::string &name, const std::string &password, const std::string &id_number,
+                                        const std::string &education, const std::string &character,
+                                        const std::vector<std::string> &subjects, const std::vector<std::string> &locations,
+                                        uint16_t price_min, uint16_t price_max,
+                                        const std::vector<std::pair<std::string, std::pair<int, int>>> &available_times,
+                                        const std::string &self_description) {
+    std::string cleaned_name = name;
+    cleaned_name.erase(0, cleaned_name.find_first_not_of(" \t\r\n"));
+    cleaned_name.erase(cleaned_name.find_last_not_of(" \t\r\n") + 1);
+
+    if (Exist(cleaned_name) || pending_teachers.count(cleaned_name)) {
+        qDebug() << "注册失败：用户或待审教师已存在：" << QString::fromStdString(cleaned_name);
+        return false;
     }
-    std::string line;
-    while (std::getline(file, line)) {
-        if (auto user = fromFile(line)) {
-            users.insert({user->GetName(), std::move(user)});
-        }
+
+    if (id_number.empty() || subjects.empty() || locations.empty() || password.empty() || available_times.empty() || self_description.empty()) {
+        qDebug() << "注册失败：教师信息、密码或自我描述不完整";
+        return false;
     }
-    file.close();
+
+    std::vector<std::string> valid_educations = {"大学生家教", "专职家教", "在职教师"};
+    std::vector<std::string> valid_characters = {"温和型", "严格型"};
+    if (std::find(valid_educations.begin(), valid_educations.end(), education) == valid_educations.end() ||
+        std::find(valid_characters.begin(), valid_characters.end(), character) == valid_characters.end()) {
+        qDebug() << "注册失败：无效的学历或性格类型，输入学历：" << QString::fromStdString(education)
+                 << ", 输入性格：" << QString::fromStdString(character);
+        return false;
+    }
+
+    auto new_teacher = std::make_unique<Teacher>(cleaned_name);
+    new_teacher->id_number = id_number;
+    new_teacher->education = education;
+    new_teacher->character = character;
+    new_teacher->subjects = subjects;
+    new_teacher->allow_location = locations;
+    new_teacher->price_min = price_min;
+    new_teacher->price_max = price_max;
+    for (const auto& time : available_times) {
+        new_teacher->add_available_time(time.first, time.second.first, time.second.second);
+    }
+    new_teacher->evaluations.push_back(self_description);
+    std::string salt = generateSalt(16);
+    std::string hashed_password = hashPasswd(password, salt);
+    pending_teachers[cleaned_name] = std::make_tuple(hashed_password, salt, std::move(new_teacher));
+    SavePendingTeachers();
+    qDebug() << "教师注册申请提交成功，等待审批：" << QString::fromStdString(cleaned_name);
+    return true;
 }
 
-void UserManage::LoadTeachers(std::string teacher_file) {
-    std::ifstream file(teacher_file);
-    if (!file) {
-        std::cerr << "Failed to open teachers file: " << teacher_file << Qt::endl;
+bool UserManage::ApproveTeacher(const std::string &name) {
+    auto it = pending_teachers.find(name);
+    if (it == pending_teachers.end()) {
+        qDebug() << "审批失败：教师未找到" << QString::fromStdString(name);
+        return false;
+    }
+
+    auto& [password, salt, teacher] = it->second;
+    if (!teacher || teacher->subjects.empty() || teacher->allow_location.empty() || teacher->available_times.empty()) {
+        qDebug() << "审批失败：教师信息不完整" << QString::fromStdString(name);
+        return false;
+    }
+
+    auto new_user = std::make_unique<User>("1", name, "");
+    new_user->changeHash(password);
+    new_user->changeSalt(salt);
+    users[name] = std::move(new_user);
+    teacher->id_number.clear();
+    teachers[name] = std::move(teacher);
+    pending_teachers.erase(it);
+
+    SaveUsers();
+    SaveTeachers();
+    SavePendingTeachers();
+    qDebug() << "教师审批通过：" << QString::fromStdString(name);
+    return true;
+}
+
+bool UserManage::RejectTeacher(const std::string &name) {
+    auto it = pending_teachers.find(name);
+    if (it == pending_teachers.end()) {
+        qDebug() << "拒绝：教师未找到" << QString::fromStdString(name);
+        return false;
+    }
+    pending_teachers.erase(it);
+    SavePendingTeachers();
+    qDebug() << "教师注册申请被拒绝：" << QString::fromStdString(name);
+    return true;
+}
+
+bool UserManage::Login(const std::string &name, const std::string &password, std::string &user_type) {
+    qDebug() << "尝试登录用户：" << QString::fromStdString(name);
+    auto it = users.find(name);
+    if (it == users.end()) {
+        qDebug() << "登录失败：用户不存在：" << QString::fromStdString(name);
+        return false;
+    }
+
+    User* user = it->second.get();
+    std::string hashed_input_password = hashPasswd(password, user->getSalt());
+
+    if (hashed_input_password == user->getHashPasswd()) {
+        user_type = user->GetType();
+        qDebug() << "登录成功！用户名：" << QString::fromStdString(name) << " 类型：" << QString::fromStdString(user_type);
+        return true;
+    } else {
+        qDebug() << "登录失败：密码不正确：" << QString::fromStdString(name);
+        return false;
+    }
+}
+
+bool UserManage::Exist(const std::string &name) const {
+    std::string cleaned_name = name;
+    cleaned_name.erase(0, cleaned_name.find_first_not_of(" \t\r\n"));
+    cleaned_name.erase(cleaned_name.find_last_not_of(" \t\r\n") + 1);
+    bool exists = users.count(cleaned_name) > 0;
+    qDebug() << "检查用户存在：" << QString::fromStdString(cleaned_name) << ", 结果：" << exists << ", 用户数：" << users.size();
+    return exists;
+}
+
+bool UserManage::AddEvaluation(const std::string &teacher_name, const std::string &evaluation) {
+    auto it = teachers.find(teacher_name);
+    if (it == teachers.end()) {
+        qDebug() << "教师未找到：" << QString::fromStdString(teacher_name);
+        return false;
+    }
+    it->second->evaluations.push_back(evaluation);
+    SaveTeachers();
+    qDebug() << "评价添加成功，教师：" << QString::fromStdString(teacher_name);
+    return true;
+}
+
+std::vector<std::string> UserManage::GetEvaluations(const std::string &teacher_name) const {
+    auto it = teachers.find(teacher_name);
+    if (it != teachers.end()) {
+        return it->second->evaluations;
+    }
+    return {};
+}
+
+void UserManage::LoadUsers() {
+    std::ifstream ifs(user_file);
+    if (!ifs.is_open()) {
+        qDebug() << "无法打开用户文件进行读取：" << QString::fromStdString(user_file);
         return;
     }
+    users.clear();
     std::string line;
-    while (std::getline(file, line)) {
-        if (auto teacher = fromTeachFile(line)) {
-            if (teachers.find(teacher->GetName()) == teachers.end()) {
-                teachers.insert({teacher->GetName(), std::move(teacher)});
-            }
+    while (std::getline(ifs, line)) {
+        line.erase(0, line.find_first_not_of(" \t\r\n"));
+        line.erase(line.find_last_not_of(" \t\r\n") + 1);
+        if (line.empty()) continue;
+
+        std::unique_ptr<User> user = fromUserFile(line);
+        if (user) {
+            users[user->GetName()] = std::move(user);
+        } else {
+            qDebug() << "解析用户数据失败：" << QString::fromStdString(line);
         }
     }
-    file.close();
+    qDebug() << "从 " << QString::fromStdString(user_file) << " 加载了 " << users.size() << " 个用户";
+    ifs.close();
 }
 
 void UserManage::SaveUsers() {
-    std::ofstream file(user_file);
-    if (!file) {
-        std::cerr << "Failed to open users file for writing: " << user_file << Qt::endl;
+    std::ofstream ofs(user_file);
+    if (!ofs.is_open()) {
+        qDebug() << "无法打开用户文件进行写入：" << QString::fromStdString(user_file);
         return;
     }
-    for (const auto& pair : users) {
-        file << pair.second->Tofilestring() << "\n";
+    for (const auto &pair : users) {
+        ofs << pair.second->toFileString() << "\n";
     }
-    std::cout << "Saved " << users.size() << " users to " << user_file << Qt::endl;
-    file.close();
+    ofs.close();
+    qDebug() << "保存了 " << users.size() << " 个用户到 " << QString::fromStdString(user_file);
+}
+
+void UserManage::LoadTeachers() {
+    std::ifstream ifs(teacher_file);
+    if (!ifs.is_open()) {
+        qDebug() << "无法打开教师文件进行读取：" << QString::fromStdString(teacher_file);
+        return;
+    }
+    teachers.clear();
+    std::string line;
+    while (std::getline(ifs, line)) {
+        line.erase(0, line.find_first_not_of(" \t\r\n"));
+        line.erase(line.find_last_not_of(" \t\r\n") + 1);
+        if (line.empty()) continue;
+
+        std::unique_ptr<Teacher> teacher = fromTeachFile(line);
+        if (teacher) {
+            teachers[teacher->GetName()] = std::move(teacher);
+        } else {
+            qDebug() << "解析教师数据失败：" << QString::fromStdString(line);
+        }
+    }
+    qDebug() << "从 " << QString::fromStdString(teacher_file) << " 加载了 " << teachers.size() << " 个教师";
+    ifs.close();
 }
 
 void UserManage::SaveTeachers() {
-    std::ofstream file(teacher_file);
-    if (!file) {
-        std::cerr << "Failed to open teachers file for writing: " << teacher_file << Qt::endl;
+    std::map<std::string, std::string> existing_teachers;
+    std::ifstream ifs(teacher_file);
+    if (ifs.is_open()) {
+        std::string line;
+        while (std::getline(ifs, line)) {
+            line.erase(0, line.find_first_not_of(" \t\r\n"));
+            line.erase(line.find_last_not_of(" \t\r\n") + 1);
+            if (line.empty()) continue;
+            size_t pos = line.find('|');
+            if (pos != std::string::npos) {
+                std::string name = line.substr(0, pos);
+                existing_teachers[name] = line;
+            }
+        }
+        ifs.close();
+    }
+
+    for (const auto &pair : teachers) {
+        existing_teachers[pair.first] = pair.second->ToTeachfilestring();
+    }
+
+    std::ofstream ofs(teacher_file);
+    if (!ofs.is_open()) {
+        qDebug() << "无法打开教师文件进行写入：" << QString::fromStdString(teacher_file);
         return;
     }
-    for (const auto& pair : teachers) {
-        file << pair.second->ToTeachfilestring() << "\n";
+    for (const auto &pair : existing_teachers) {
+        ofs << pair.second << "\n";
     }
-    std::cout << "Saved " << teachers.size() << " teachers to " << teacher_file << Qt::endl;
-    file.close();
+    qDebug() << "保存了 " << existing_teachers.size() << " 个教师到 " << QString::fromStdString(teacher_file);
+    ofs.close();
 }
 
-std::string User::Tofilestring() {
-    return user_name + ',' + user_type + ',' + hash_passwd + ',' + salt;
-}
-
-std::string Teacher::ToTeachfilestring() {
-    std::string course;
-    for (auto it = subjects.begin(); it != subjects.end(); ++it) {
-        course += *it;
-        if (it != subjects.end() - 1) course += ",";
-    }
-    std::string locations;
-    for (auto it = allow_location.begin(); it != allow_location.end(); ++it) {
-        locations += *it;
-        if (it != allow_location.end() - 1) locations += ",";
-    }
-    std::string times;
-    for (auto it = available_times.begin(); it != available_times.end(); ++it) {
-        times += it->first + "," + std::to_string(it->second.first) + "," + std::to_string(it->second.second);
-        if (std::next(it) != available_times.end()) times += "/";
-    }
-    std::string price_m = std::to_string(price_min);
-    std::string price_h = std::to_string(price_high);
-    return user_name + "|" + education + "|" + character + "|" + course + "|" + price_m + "|" +
-           price_h + "|" + locations + "|" + times;
-}
-
-std::unique_ptr<User> UserManage::fromFile(const std::string& data) {
-    std::istringstream iss(data);
-    std::string name, type, hash, salt;
-    if (std::getline(iss, name, ',') &&
-        std::getline(iss, type, ',') &&
-        std::getline(iss, hash, ',') &&
-        std::getline(iss, salt)) {
-        std::unique_ptr<User> ptr = std::make_unique<User>(type, name, "");
-        ptr->ChangeName(name);
-        ptr->ChangeType(type);
-        ptr->ChangeHash(hash);
-        ptr->ChangeSalt(salt);
-        return ptr;
-    }
-    return nullptr;
-}
-
-std::unique_ptr<Teacher> UserManage::fromTeachFile(const std::string& data) {
-    std::istringstream iss(data);
-    std::string name, education, character, subjects, price_m, price_h, locations, times;
-
-    std::unique_ptr<Teacher> teacher = std::make_unique<Teacher>();
-    if (!std::getline(iss, name, '|') ||
-        !std::getline(iss, education, '|') ||
-        !std::getline(iss, character, '|') ||
-        !std::getline(iss, subjects, '|') ||
-        !std::getline(iss, price_m, '|') ||
-        !std::getline(iss, price_h, '|') ||
-        !std::getline(iss, locations, '|') ||
-        !std::getline(iss, times)) {
-        return nullptr;
-    }
-
-    teacher->ChangeName(name);
-    teacher->education = education;
-    teacher->character = character;
-
-    std::istringstream course_ss(subjects);
-    std::string subject;
-    while (std::getline(course_ss, subject, ',')) {
-        if (!subject.empty()) {
-            teacher->subjects.push_back(subject);
-        }
-    }
-
-    try {
-        teacher->price_min = std::stoi(price_m);
-        teacher->price_high = std::stoi(price_h);
-    } catch (const std::exception& e) {
-        return nullptr;
-    }
-
-    std::istringstream locations_ss(locations);
-    std::string location;
-    while (std::getline(locations_ss, location, ',')) {
-        if (!location.empty()) {
-            teacher->allow_location.push_back(location);
-        }
-    }
-
-    std::istringstream times_ss(times);
-    std::string time_entry;
-    while (std::getline(times_ss, time_entry, '/')) {
-        std::istringstream entry_ss(time_entry);
-        std::string day, start_str, end_str;
-        if (std::getline(entry_ss, day, ',') &&
-            std::getline(entry_ss, start_str, ',') &&
-            std::getline(entry_ss, end_str)) {
-            try {
-                int start = std::stoi(start_str);
-                int end = std::stoi(end_str);
-                teacher->available_times.emplace_back(day, std::make_pair(start, end));
-            } catch (const std::exception& e) {
-                continue;
-            }
-        }
-    }
-
-    return teacher;
-}
-
-void UserManage::AddRelationship(const std::string& student_name, const std::string& teacher_name,
-                                const std::string& subject, const std::string& time_slot) {
-    std::stringstream ss(time_slot);
-    std::string day, start_str, end_str;
-    if (!std::getline(ss, day, ',') || !std::getline(ss, start_str, ',') || !std::getline(ss, end_str)) {
-        qDebug() << "[UserManage] Invalid time slot format:" << QString::fromStdString(time_slot);
-        throw std::runtime_error("Invalid time slot format: " + time_slot);
-    }
-
-    int start, end;
-    try {
-        start = std::stoi(start_str);
-        end = std::stoi(end_str);
-    } catch (const std::exception& e) {
-        qDebug() << "[UserManage] Invalid time values:" << QString::fromStdString(time_slot);
-        throw std::runtime_error("Invalid time values: " + time_slot);
-    }
-
-    if (start >= end || start < 0 || end > 2359) {
-        qDebug() << "[UserManage] Invalid time range:" << start << "-" << end;
-        throw std::runtime_error("Invalid time range: " + std::to_string(start) + "-" + std::to_string(end));
-    }
-
-    auto& teacher = FindTeacher(teacher_name);
-
-    bool time_available = false;
-    for (const auto& t : teacher->available_times) {
-        if (t.first == day && t.second.first == start && t.second.second == end) {
-            time_available = true;
-            break;
-        }
-    }
-    if (!time_available) {
-        qDebug() << "[UserManage] Teacher" << QString::fromStdString(teacher_name)
-                 << " has no exact time slot:" << QString::fromStdString(time_slot);
-        throw std::runtime_error("Teacher does not have exact time slot: " + time_slot);
-    }
-
-    for (const auto& rel : relationships) {
-        if (std::get<1>(rel) == teacher_name) {
-            std::stringstream rel_ss(std::get<3>(rel));
-            std::string rel_day, rel_start_str, rel_end_str;
-            if (std::getline(rel_ss, rel_day, ',') &&
-                std::getline(rel_ss, rel_start_str, ',') &&
-                std::getline(rel_ss, rel_end_str)) {
-                try {
-                    int rel_start = std::stoi(rel_start_str);
-                    int rel_end = std::stoi(rel_end_str);
-                    if (rel_day == day && start < rel_end && end > rel_start) {
-                        qDebug() << "[UserManage] time slot " << QString::fromStdString(time_slot)
-                                 << " conflicts with existing time slot for teacher "
-                                 << QString::fromStdString(teacher_name) << ":"
-                                 << QString::fromStdString(std::get<3>(rel));
-                        throw std::runtime_error("Time slot conflicts with existing time slot");
-                    }
-                } catch (const std::exception& e) {
-                    qDebug() << "[UserManage] Invalid time slot format in relationship:"
-                             << QString::fromStdString(std::get<3>(rel));
-                }
-            }
-        }
-    }
-
-    relationships.emplace_back(student_name, teacher_name, subject, time_slot);
-    qDebug() << "[UserManage] Added relationship: student=" << QString::fromStdString(student_name)
-             << ", teacher=" << QString::fromStdString(teacher_name)
-             << ", subject=" << QString::fromStdString(subject)
-             << ", time_slot=" << QString::fromStdString(time_slot);
-
-    SaveRelationships();
-}
-
-void UserManage::updateTeacherTime(const std::string& teacher_name, const std::string& weekday,
-                                   int start, int end) {
-    auto& teacher = FindTeacher(teacher_name);
-    teacher->remove_available_time(weekday, start, end);
-    qDebug() << "Removed time slot for teacher" << QString::fromStdString(teacher_name)
-             << ": " << QString::fromStdString(weekday) << "," << start << "-" << end;
-
-    std::vector<std::string> lines;
-    std::ifstream in(teacher_file);
-    if (!in) {
-        qDebug() << "Failed to open teacher_info.txt for reading";
-        throw std::runtime_error("Failed to open teacher file");
-    }
-
-    std::string line;
-    while (std::getline(in, line)) {
-        if (line.empty()) continue;
-        std::vector<std::string> parts;
-        std::stringstream ss(line);
-        std::string part;
-        while (std::getline(ss, part, '|')) {
-            parts.push_back(part);
-        }
-        if (parts.size() >= 8 && parts[0] == teacher_name) {
-            std::string new_times;
-            for (const auto& t : teacher->available_times) {
-                if (!new_times.empty()) new_times += "/";
-                new_times += t.first + "," + std::to_string(t.second.first) + "," +
-                             std::to_string(t.second.second);
-            }
-            parts[7] = new_times.empty() ? "" : new_times;
-            line = parts[0];
-            for (size_t i = 1; i < parts.size(); ++i) {
-                line += "|" + parts[i];
-            }
-        }
-        lines.push_back(line);
-    }
-    in.close();
-
-    std::ofstream out(teacher_file);
-    if (!out) {
-        qDebug() << "Failed to open teacher_info.txt for writing";
-        throw std::runtime_error("Failed to open teacher file for writing");
-    }
-    for (const auto& l : lines) {
-        out << l << "\n";
-    }
-    out.close();
-
-    qDebug() << "Updated teacher_info.txt for" << QString::fromStdString(teacher_name);
-}
-
-void UserManage::LoadRelationships(const std::string& file) {
-    std::ifstream ifs(file);
+void UserManage::LoadPendingTeachers() {
+    std::ifstream ifs(pending_teacher_file);
     if (!ifs.is_open()) {
-        std::cerr << "Failed to open relationships: " << file << Qt::endl;
+        qDebug() << "无法打开待审教师文件进行读取：" << QString::fromStdString(pending_teacher_file);
+        return;
+    }
+    pending_teachers.clear();
+    std::string line;
+    int line_number = 0;
+    while (std::getline(ifs, line)) {
+        ++line_number;
+        line.erase(0, line.find_first_not_of(" \t\r\n"));
+        line.erase(line.find_last_not_of(" \t\r\n") + 1);
+        if (line.empty()) {
+            qDebug() << "跳过空行，行号：" << line_number;
+            continue;
+        }
+
+        auto [password, salt, teacher] = fromPendingTeachFile(line);
+        if (teacher && !password.empty()) {
+            qDebug() << "成功加载待审教师：" << QString::fromStdString(teacher->GetName()) << ", 行号：" << line_number;
+            pending_teachers[teacher->GetName()] = std::make_tuple(password, salt, std::move(teacher));
+        } else {
+            qDebug() << "解析待审教师数据失败，行号：" << line_number << ", 数据：" << QString::fromStdString(line);
+        }
+    }
+    qDebug() << "从 " << QString::fromStdString(pending_teacher_file) << " 加载了 " << pending_teachers.size() << " 个待审教师";
+    ifs.close();
+}
+
+void UserManage::SavePendingTeachers() {
+    std::ofstream ofs(pending_teacher_file);
+    if (!ofs.is_open()) {
+        qDebug() << "无法打开待审教师文件进行写入：" << QString::fromStdString(pending_teacher_file);
+        return;
+    }
+    for (const auto &pair : pending_teachers) {
+        const auto &[password, salt, teacher] = pair.second;
+        ofs << pair.first << "|" << password << "|" << salt << "|"
+            << teacher->education << "|"
+            << teacher->character << "|"
+            << teacher->id_number << "|";
+        for (size_t i = 0; i < teacher->subjects.size(); ++i) {
+            ofs << teacher->subjects[i];
+            if (i < teacher->subjects.size() - 1) ofs << ",";
+        }
+        ofs << "|" << teacher->price_min << "|"
+            << teacher->price_max << "|";
+        for (size_t i = 0; i < teacher->allow_location.size(); ++i) {
+            ofs << teacher->allow_location[i];
+            if (i < teacher->allow_location.size() - 1) ofs << ",";
+        }
+        ofs << "|";
+        for (size_t i = 0; i < teacher->available_times.size(); ++i) {
+            ofs << teacher->available_times[i].first << ","
+                << teacher->available_times[i].second.first << ","
+                << teacher->available_times[i].second.second;
+            if (i < teacher->available_times.size() - 1) ofs << "/";
+        }
+        ofs << "|";
+        for (size_t i = 0; i < teacher->evaluations.size(); ++i) {
+            ofs << teacher->evaluations[i];
+            if (i < teacher->evaluations.size() - 1) ofs << "/";
+        }
+        ofs << "\n";
+    }
+    qDebug() << "保存了 " << pending_teachers.size() << " 个待审教师到 " << QString::fromStdString(pending_teacher_file);
+    ofs.close();
+}
+
+void UserManage::LoadRelationships() {
+    std::ifstream ifs(relationship_file);
+    if (!ifs.is_open()) {
+        qDebug() << "无法打开关系文件进行读取：" << QString::fromStdString(relationship_file);
         return;
     }
     relationships.clear();
     std::string line;
     while (std::getline(ifs, line)) {
-        std::istringstream iss(line);
+        std::stringstream ss(line);
         std::string student_name, teacher_name, subject, time_slot;
-        if (std::getline(iss, student_name, '|') &&
-            std::getline(iss, teacher_name, '|') &&
-            std::getline(iss, subject, '|') &&
-            std::getline(iss, time_slot)) {
+        if (std::getline(ss, student_name, '|') &&
+            std::getline(ss, teacher_name, '|') &&
+            std::getline(ss, subject, '|') &&
+            std::getline(ss, time_slot)) {
             relationships.emplace_back(student_name, teacher_name, subject, time_slot);
+        } else {
+            qDebug() << "解析关系数据失败：" << QString::fromStdString(line);
         }
     }
+    qDebug() << "从 " << QString::fromStdString(relationship_file) << " 加载了 " << relationships.size() << " 条关系";
     ifs.close();
 }
 
 void UserManage::SaveRelationships() {
     std::ofstream ofs(relationship_file);
-    if (!ofs) {
-        std::cerr << "Failed to open relationships file for writing: " << relationship_file << Qt::endl;
-        throw std::runtime_error("Failed to open relationships.txt");
+    if (!ofs.is_open()) {
+        qDebug() << "无法打开关系文件进行写入：" << QString::fromStdString(relationship_file);
+        return;
     }
-    for (const auto& rel : relationships) {
-        ofs << std::get<0>(rel) << "|" << std::get<1>(rel) << "|" << std::get<2>(rel) << "|"
-            << std::get<3>(rel) << "\n";
+    for (const auto &rel : relationships) {
+        ofs << std::get<0>(rel) << "|" << std::get<1>(rel) << "|" << std::get<2>(rel) << "|" << std::get<3>(rel) << "\n";
     }
-    qDebug() << "Saved " << relationships.size() << " relationships to " << QString::fromStdString(relationship_file);
+    qDebug() << "保存了 " << relationships.size() << " 条关系到 " << QString::fromStdString(relationship_file);
     ofs.close();
 }
 
-void UserManage::AddRecord(const std::string& student_name, const std::string& teacher_name,
-                           const std::string& subject, int score, const std::string& date) {
-    if (score < 0 || score > 150) {
-        qDebug() << "Invalid score: " << score << " must be between 0 and 150";
-        throw std::runtime_error("Invalid score: must be between 0 and 150");
+void UserManage::AddRelationship(const std::string &student_name, const std::string &teacher_name,
+                                 const std::string &subject, const std::string &time_slot) {
+    for (const auto &rel : relationships) {
+        if (std::get<0>(rel) == student_name &&
+            std::get<1>(rel) == teacher_name &&
+            std::get<2>(rel) == subject &&
+            std::get<3>(rel) == time_slot) {
+            qDebug() << "关系已存在：学生=" << QString::fromStdString(student_name)
+                     << ", 教师=" << QString::fromStdString(teacher_name)
+                     << ", 科目=" << QString::fromStdString(subject)
+                     << ", 时间段=" << QString::fromStdString(time_slot);
+            return;
+        }
     }
+    relationships.emplace_back(student_name, teacher_name, subject, time_slot);
+    qDebug() << "添加关系：学生=" << QString::fromStdString(student_name)
+             << ", 教师=" << QString::fromStdString(teacher_name)
+             << ", 科目=" << QString::fromStdString(subject)
+             << ", 时间段=" << QString::fromStdString(time_slot);
+    SaveRelationships();
+}
 
+std::vector<std::tuple<std::string, std::string, std::string, std::string>>
+UserManage::GetRelationshipsForUser(const std::string &user_name) const {
+    std::vector<std::tuple<std::string, std::string, std::string, std::string>> user_rels;
+    for (const auto &rel : relationships) {
+        if (std::get<0>(rel) == user_name || std::get<1>(rel) == user_name) {
+            user_rels.push_back(rel);
+        }
+    }
+    return user_rels;
+}
+
+void UserManage::AddRecord(const std::string &student_name, const std::string &teacher_name,
+                           const std::string &subject, int score, const std::string &date) {
     records.emplace_back(student_name, teacher_name, subject, score, date);
-    qDebug() << "Added record: student=" << QString::fromStdString(student_name)
-             << ", teacher=" << QString::fromStdString(teacher_name)
-             << ", subject=" << QString::fromStdString(subject)
-             << ", score=" << score
-             << ", date=" << QString::fromStdString(date);
+    qDebug() << "添加记录：学生=" << QString::fromStdString(student_name)
+             << ", 教师=" << QString::fromStdString(teacher_name)
+             << ", 科目=" << QString::fromStdString(subject)
+             << ", 分数=" << score
+             << ", 日期=" << QString::fromStdString(date);
     SaveRecords();
 }
 
-void UserManage::LoadRecords(const std::string& file) {
-    std::ifstream ifs(file);
+void UserManage::LoadRecords() {
+    std::ifstream ifs(record_file);
     if (!ifs.is_open()) {
-        std::cerr << "Failed to open records: " << file << ", creating records file." << Qt::endl;
-        std::ofstream ofs(file);
-        ofs.close();
+        qDebug() << "无法打开记录文件进行读取：" << QString::fromStdString(record_file);
         return;
     }
-
     records.clear();
     std::string line;
     while (std::getline(ifs, line)) {
-        std::istringstream iss(line);
+        line.erase(0, line.find_first_not_of(" \t\r\n"));
+        line.erase(line.find_last_not_of(" \t\r\n") + 1);
+        if (line.empty()) continue;
+
+        std::stringstream ss(line);
         std::string student_name, teacher_name, subject, score_str, date;
-        if (std::getline(iss, student_name, '|') &&
-            std::getline(iss, teacher_name, '|') &&
-            std::getline(iss, subject, '|') &&
-            std::getline(iss, score_str, '|') &&
-            std::getline(iss, date)) {
+        if (std::getline(ss, student_name, '|') &&
+            std::getline(ss, teacher_name, '|') &&
+            std::getline(ss, subject, '|') &&
+            std::getline(ss, score_str, '|') &&
+            std::getline(ss, date)) {
             try {
                 int score = std::stoi(score_str);
-                if (score < 0 || score > 150) {
-                    std::cerr << "Invalid score in record: " << score << ", skipping line: " << line << Qt::endl;
-                    continue;
-                }
-                records.emplace_back(std::move(student_name), std::move(teacher_name), std::move(subject), score,
-                                     std::move(date));
-            } catch (const std::exception& e) {
-                std::cerr << "Invalid record format: " << line << Qt::endl;
+                records.emplace_back(student_name, teacher_name, subject, score, date);
+            } catch (const std::exception &e) {
+                qDebug() << "解析记录分数失败：" << QString::fromStdString(line) << ", 错误：" << e.what();
             }
+        } else {
+            qDebug() << "解析记录数据失败：" << QString::fromStdString(line);
         }
     }
+    qDebug() << "从 " << QString::fromStdString(record_file) << " 加载了 " << records.size() << " 条记录";
     ifs.close();
 }
 
 void UserManage::SaveRecords() {
     std::ofstream ofs(record_file);
-    if (!ofs) {
-        std::cerr << "Failed to open records file for writing: " << record_file << Qt::endl;
+    if (!ofs.is_open()) {
+        qDebug() << "无法打开记录文件进行写入：" << QString::fromStdString(record_file);
         return;
     }
-
-    for (const auto& rec : records) {
+    for (const auto &rec : records) {
         ofs << std::get<0>(rec) << "|" << std::get<1>(rec) << "|" << std::get<2>(rec) << "|"
             << std::get<3>(rec) << "|" << std::get<4>(rec) << "\n";
     }
-    std::cout << "Saved " << records.size() << " records to " << record_file << Qt::endl;
+    qDebug() << "保存了 " << records.size() << " 条记录到 " << QString::fromStdString(record_file);
     ofs.close();
 }
 
-bool UserManage::Delete(const std::string& name) {
+bool UserManage::Delete(const std::string &name) {
     auto user_it = users.find(name);
     if (user_it == users.end()) {
+        qDebug() << "无法删除：用户不存在：" << QString::fromStdString(name);
         return false;
     }
 
@@ -576,25 +673,325 @@ bool UserManage::Delete(const std::string& name) {
         teachers.erase(teacher_it);
     }
 
+    auto pending_it = pending_teachers.find(name);
+    if (pending_it != pending_teachers.end()) {
+        pending_teachers.erase(pending_it);
+    }
+
     relationships.erase(
-        std::remove_if(relationships.begin(), relationships.end(),
-            [&name](const auto& rel) {
-                return std::get<0>(rel) == name || std::get<1>(rel) == name;
+        std::remove_if(
+            relationships.begin(),
+            relationships.end(),
+            [&name](const auto &it) {
+                return std::get<0>(it) == name || std::get<1>(it) == name;
             }),
         relationships.end());
 
     records.erase(
-        std::remove_if(records.begin(), records.end(),
-            [&name](const auto& rec) {
-                return std::get<0>(rec) == name || std::get<1>(rec) == name;
+        std::remove_if(
+            records.begin(),
+            records.end(),
+            [&name](const auto &it) {
+                return std::get<0>(it) == name || std::get<1>(it) == name;
             }),
         records.end());
 
     SaveUsers();
     SaveTeachers();
+    SavePendingTeachers();
     SaveRelationships();
     SaveRecords();
-
-    std::cout << "Successfully deleted: " << name << Qt::endl;
+    qDebug() << "用户已删除成功：" << QString::fromStdString(name);
     return true;
+}
+
+std::vector<std::string> split(const std::string& str, char delimiter) {
+    std::vector<std::string> tokens;
+    std::string token;
+    std::istringstream tokenStream(str);
+    while (std::getline(tokenStream, token, delimiter)) {
+        token.erase(0, token.find_first_not_of(" \t\r\n"));
+        token.erase(token.find_last_not_of(" \t\r\n") + 1);
+        if (!token.empty()) tokens.push_back(token);
+    }
+    return tokens;
+}
+
+std::unique_ptr<Teacher> UserManage::fromTeachFile(const std::string &data) {
+    std::vector<std::string> fields = split(data, '|');
+    if (fields.size() < 8) {
+        qDebug() << "教师数据字段不足：" << QString::fromStdString(data) << ", 找到 " << fields.size() << " fields";
+        return nullptr;
+    }
+
+    std::string name = fields[0];
+    std::string education_code = fields[1];
+    std::string character_code = fields[2];
+    std::string subjects_str = fields[3];
+    std::string price_min_str = fields[4];
+    std::string price_max_str = fields[5];
+    std::string locations_str = fields[6];
+    std::string times_str = fields[7];
+    std::string evaluations_str = fields.size() > 8 ? fields[8] : "";
+
+    name.erase(std::remove(name.begin(), name.end(), '"'), name.end());
+
+    qDebug() << "解析教师数据：姓名='" << QString::fromStdString(name)
+             << "', 学历代码=" << QString::fromStdString(education_code)
+             << ", 性格代码=" << QString::fromStdString(character_code);
+
+    std::string education;
+    if (education_code == "0") education = "大学生家教";
+    else if (education_code == "1") education = "专职家教";
+    else if (education_code == "2") education = "在职教师";
+    else {
+        qDebug() << "无效的学历代码：" << QString::fromStdString(education_code);
+        return nullptr;
+    }
+
+    std::string character;
+    if (character_code == "0") character = "温和型";
+    else if (character_code == "1") character = "严格型";
+    else {
+        qDebug() << "无效的性格代码：" << QString::fromStdString(character_code);
+        return nullptr;
+    }
+
+    auto teacher = std::make_unique<Teacher>(name);
+    teacher->education = education;
+    teacher->character = character;
+
+    std::vector<std::string> subjects = split(subjects_str, ',');
+    for (const auto& subject : subjects) {
+        if (!subject.empty()) {
+            std::string normalized_subject = subject;
+            if (normalized_subject == "physical" || normalized_subject == "Physical") normalized_subject = "物理";
+            if (normalized_subject == "math" || normalized_subject == "Math") normalized_subject = "数学";
+            teacher->subjects.push_back(normalized_subject);
+            qDebug() << "添加科目：" << QString::fromStdString(normalized_subject);
+        }
+    }
+    if (teacher->subjects.empty()) {
+        qDebug() << "教师无有效科目：" << QString::fromStdString(name);
+        return nullptr;
+    }
+
+    try {
+        if (!std::all_of(price_min_str.begin(), price_min_str.end(), ::isdigit) ||
+            !std::all_of(price_max_str.begin(), price_max_str.end(), ::isdigit)) {
+            qDebug() << "价格范围非数字：" << QString::fromStdString(price_min_str)
+                     << ", " << QString::fromStdString(price_max_str);
+            return nullptr;
+        }
+        uint16_t price_min = std::stoi(price_min_str);
+        uint16_t price_max = std::stoi(price_max_str);
+        if (price_min <= 0 || price_min > price_max) {
+            qDebug() << "无效的价格范围：" << price_min << " - " << price_max;
+            return nullptr;
+        }
+        teacher->price_min = price_min;
+        teacher->price_max = price_max;
+        qDebug() << "价格范围：" << price_min << "-" << price_max;
+    } catch (const std::exception &e) {
+        qDebug() << "解析教师价格失败：" << QString::fromStdString(price_min_str)
+                 << ", " << QString::fromStdString(price_max_str)
+                 << ", 错误：" << e.what();
+        return nullptr;
+    }
+
+    std::vector<std::string> locations = split(locations_str, ',');
+    for (const auto& loc : locations) {
+        if (!loc.empty()) {
+            teacher->allow_location.push_back(loc);
+            qDebug() << "添加地点：" << QString::fromStdString(loc);
+        }
+    }
+    if (teacher->allow_location.empty()) {
+        qDebug() << "教师无有效地点：" << QString::fromStdString(name);
+        return nullptr;
+    }
+
+    std::vector<std::string> time_slots = split(times_str, '/');
+    for (const auto& time_slot : time_slots) {
+        std::vector<std::string> time_parts = split(time_slot, ',');
+        if (time_parts.size() == 3) {
+            try {
+                std::string weekday = time_parts[0];
+                int start = std::stoi(time_parts[1]);
+                int end = std::stoi(time_parts[2]);
+                if (start < end && start >= 0 && end <= 2400) {
+                    teacher->add_available_time(weekday, start, end);
+                    qDebug() << "添加时间段：" << QString::fromStdString(weekday)
+                             << ", " << start << "-" << end;
+                } else {
+                    qDebug() << "无效时间段：" << QString::fromStdString(time_slot) << ", start >= end 或超出范围";
+                }
+            } catch (const std::exception &e) {
+                qDebug() << "解析时间段失败：" << QString::fromStdString(time_slot)
+                         << ", 错误：" << e.what();
+            }
+        } else {
+            qDebug() << "时间段格式错误：" << QString::fromStdString(time_slot);
+        }
+    }
+    if (teacher->available_times.empty()) {
+        qDebug() << "教师无有效时间段：" << QString::fromStdString(name);
+        return nullptr;
+    }
+
+    if (!evaluations_str.empty()) {
+        std::vector<std::string> evaluations = split(evaluations_str, '/');
+        for (const auto& eval : evaluations) {
+            if (!eval.empty()) {
+                teacher->evaluations.push_back(eval);
+                qDebug() << "添加评价：" << QString::fromStdString(eval);
+            }
+        }
+    }
+
+    return teacher;
+}
+
+std::tuple<std::string, std::string, std::unique_ptr<Teacher>> UserManage::fromPendingTeachFile(const std::string& data) {
+    std::vector<std::string> fields = split(data, '|');
+    if (fields.size() < 11) {
+        qDebug() << "无效的待审教师数据：字段不足，找到 " << fields.size();
+        return {"", "", nullptr};
+    }
+
+    try {
+        std::string name = fields[0];
+        std::string password = fields[1];
+        std::string salt = fields[2];
+        std::string education = fields[3];
+        std::string character = fields[4];
+        std::string id_number = fields[5];
+        std::string subjects_str = fields[6];
+        std::string price_min_str = fields[7];
+        std::string price_max_str = fields[8];
+        std::string locations_str = fields[9];
+        std::string times_str = fields[10];
+        std::string evaluations_str = fields.size() > 11 ? fields[11] : "";
+
+        name.erase(std::remove(name.begin(), name.end(), '"'), name.end());
+
+        qDebug() << "解析待审教师：姓名='" << QString::fromStdString(name)
+                 << "', 学历=" << QString::fromStdString(education)
+                 << ", 性格=" << QString::fromStdString(character)
+                 << ", ID=" << QString::fromStdString(id_number);
+
+        std::string education_name;
+        if (education == "0") education_name = "大学生家教";
+        else if (education == "1") education_name = "专职家教";
+        else if (education == "2") education_name = "在职教师";
+        else {
+            qDebug() << "无效的学历代码：" << QString::fromStdString(education);
+            return {"", "", nullptr};
+        }
+
+        std::string character_name;
+        if (character == "0") character_name = "温和型";
+        else if (character == "1") character_name = "严格型";
+        else {
+            qDebug() << "无效的性格代码：" << QString::fromStdString(character);
+            return {"", "", nullptr};
+        }
+
+        auto teacher = std::make_unique<Teacher>(name);
+        teacher->education = education_name;
+        teacher->character = character_name;
+        teacher->id_number = id_number;
+
+        std::vector<std::string> subjects = split(subjects_str, ',');
+        for (const auto& subject : subjects) {
+            if (!subject.empty()) {
+                teacher->subjects.push_back(subject);
+            }
+        }
+        if (teacher->subjects.empty()) {
+            qDebug() << "待审教师无有效科目：" << QString::fromStdString(name);
+            return {"", "", nullptr};
+        }
+
+        if (!std::all_of(price_min_str.begin(), price_min_str.end(), ::isdigit) ||
+            !std::all_of(price_max_str.begin(), price_max_str.end(), ::isdigit)) {
+            qDebug() << "价格范围非数字：" << QString::fromStdString(price_min_str)
+                     << ", " << QString::fromStdString(price_max_str);
+            return {"", "", nullptr};
+        }
+        uint16_t price_min = std::stoi(price_min_str);
+        uint16_t price_max = std::stoi(price_max_str);
+        if (price_min <= 0 || price_min > price_max) {
+            qDebug() << "无效的价格范围：" << price_min << "-" << price_max;
+            return {"", "", nullptr};
+        }
+        teacher->price_min = price_min;
+        teacher->price_max = price_max;
+
+        std::vector<std::string> locations = split(locations_str, ',');
+        for (const auto& loc : locations) {
+            if (!loc.empty()) {
+                teacher->allow_location.push_back(loc);
+            }
+        }
+        if (teacher->allow_location.empty()) {
+            qDebug() << "待审教师无有效地点：" << QString::fromStdString(name);
+            return {"", "", nullptr};
+        }
+
+        std::vector<std::string> time_slots = split(times_str, '/');
+        for (const auto& time_slot : time_slots) {
+            std::vector<std::string> time_parts = split(time_slot, ',');
+            if (time_parts.size() == 3) {
+                std::string weekday = time_parts[0];
+                int start_time = std::stoi(time_parts[1]);
+                int end_time = std::stoi(time_parts[2]);
+                if (start_time < end_time && start_time >= 0 && end_time <= 2400) {
+                    teacher->add_available_time(weekday, start_time, end_time);
+                } else {
+                    qDebug() << "无效时间段：" << QString::fromStdString(time_slot);
+                }
+            } else {
+                qDebug() << "无效时间段格式：" << QString::fromStdString(time_slot);
+            }
+        }
+        if (teacher->available_times.empty()) {
+            qDebug() << "待审教师无有效时间段：" << QString::fromStdString(name);
+            return {"", "", nullptr};
+        }
+
+        if (!evaluations_str.empty()) {
+            std::vector<std::string> evaluations = split(evaluations_str, '/');
+            for (const auto& eval : evaluations) {
+                if (!eval.empty()) {
+                    teacher->evaluations.push_back(eval);
+                }
+            }
+        }
+
+        return {password, salt, std::move(teacher)};
+    } catch (const std::exception& e) {
+        qDebug() << "解析待审教师数据出错：" << QString::fromStdString(data) << ", 错误：" << e.what();
+        return {"", "", nullptr};
+    }
+}
+
+std::unique_ptr<User> UserManage::fromUserFile(const std::string &data) {
+    std::stringstream ss(data);
+    std::string type, name, hash, salt;
+    if (std::getline(ss, type, '|') &&
+        std::getline(ss, name, '|') &&
+        std::getline(ss, hash, '|') &&
+        std::getline(ss, salt)) {
+        auto user = std::make_unique<User>("", "", "");
+        user->changeType(type);
+        user->changeName(name);
+        user->changeHash(hash);
+        user->changeSalt(salt);
+        qDebug() << "用户解析成功：姓名=" << QString::fromStdString(name)
+                 << ", 类型=" << QString::fromStdString(type);
+        return user;
+    }
+    qDebug() << "解析用户文件行失败：" << QString::fromStdString(data);
+    return nullptr;
 }

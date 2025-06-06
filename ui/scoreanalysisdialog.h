@@ -1,8 +1,8 @@
 #ifndef SCOREANALYSISDIALOG_H
 #define SCOREANALYSISDIALOG_H
 
-#include "user_manage.hpp"
 #include <QDialog>
+#include "user_manage.hpp"
 
 namespace Ui {
 class ScoreAnalysisDialog;
@@ -15,10 +15,8 @@ public:
     explicit ScoreAnalysisDialog(UserManage* userManage, const QString& studentName, QWidget* parent = nullptr);
     ~ScoreAnalysisDialog();
 
-private slots:
-    void on_analyzeButton_clicked();
-
 private:
+    void setupChart(); // Added declaration
     Ui::ScoreAnalysisDialog* ui;
     UserManage* userManage;
     QString studentName;
